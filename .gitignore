@@ -1,0 +1,36 @@
+# Compilados de C/C++
+*.out
+*.o
+*.obj
+*.exe
+*.a
+*.so
+*.dll
+
+# Carpetas de compilación
+build/
+dist/
+bin/
+
+# Archivos de base de datos
+*.db
+
+# Archivos temporales
+*.log
+*.tmp
+*.swp
+*~
+
+# Archivos de backup
+*.bak
+
+# Archivos generados por editores
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+.DS_Store
+
+# Ignora ejecutables del servidor
+server
+web_atlantis
