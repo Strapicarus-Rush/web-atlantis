@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="ligth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prototipo UI con Canvas Dinámico</title>
+  <link rel="stylesheet" href="css/panel.css" />
+  <script src="js/theme.js" defer></script>
+</head>
+<body>
+  <header>
+    <nav>
+      <button data-tab="status" class="tab active">Status</button>
+      <button data-tab="comandos" class="tab">Comandos</button>
+      <button data-tab="Config" class="tab">Config</button>
+      
+      <button id="toggleTheme">🌓</button>
+    </nav>
+  </header>
+
+  <main>
+
+    <section data-content="status" class="content active">
+      <canvas id="chartCanvas" width="600" height="300" data-type="bar"></canvas>
+      <div class="chart-controls">
+        <button id="refreshChart" data-endpoint="/api/chart-data">Actualizar gráfico</button>
+        <button id="toggleChartType">Cambiar a Línea</button>
+      </div>
+    </section>
+
+    <section data-content="comandos" class="content">
+      <p>Vista de envio de conmandos...</p>
+      <button id="loadData" data-endpoint="/api/data">Cargar Datos</button>
+    </section>
+
+    <section data-content="Config" class="content">
+      <p>Configuraciones..</p>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Prototipo UI</p>
+  </footer>
+  <script src="js/panel.js" defer></script>
+</body>
+</html>
