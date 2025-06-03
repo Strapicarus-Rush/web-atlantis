@@ -14,6 +14,9 @@ inline int TOKEN_EXPIRY = 3600;
 
 const std::string sing = "gsdSDGSD_:,$512512_12534-.,45@#)";
 
+// class DBManager;
+// DBManager* get_db_manager_instance();
+
 uint32_t simple_hash(const std::string& str) {
     uint32_t h = 0x811C9DC5;
     for (char c : str) {
