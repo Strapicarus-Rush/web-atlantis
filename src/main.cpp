@@ -23,6 +23,7 @@ bool DEV_MODE = true;
 bool DEBUG_MODE = true;
 bool LOG_MODE = false;
 std::ofstream log_file;
+int MAX_THREADS = 2;
 
 // ========================
 // Declaraciones externas
@@ -93,7 +94,6 @@ public:
 // ========================
 void fatal_error(const std::string& msg, int exit_code = 1) {
     debug_log(msg);
-    std::cerr << "ERROR: " << msg << std::endl;
     if (log_file.is_open()) {
         log_file << "FATAL: " << msg << std::endl;
         log_file.close();
@@ -102,13 +102,22 @@ void fatal_error(const std::string& msg, int exit_code = 1) {
     std::exit(exit_code);
 }
 
+void checkNotRoot() {
+    if (geteuid() == 0) {
+        fatal_error("Este programa no puede ejecutarse como root.\n");
+        std::exit(EXIT_FAILURE);
+    }
+}
+
 // ========================
 // Función principal
 // ========================
 int main(int argc, char* argv[]) {
+    checkNotRoot();
     // Procesamiento de argumentos
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "-log") == 0) LOG_MODE = true;
+        if (std::strcmp(argv[i], "-logfile") == 0) LOG_MODE = true;
+        if (std::strcmp(argv[i], "-help") == 0) LOG_MODE = true;
         if (std::strcmp(argv[i], "-prod") == 0) DEV_MODE = false;
         if (std::strcmp(argv[i], "-nodebug") == 0) DEBUG_MODE = false;
 

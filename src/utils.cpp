@@ -8,6 +8,12 @@
 #include "debug_log.hpp"
 
 extern bool DEV_MODE;
+extern std::string DB_PATH;
+extern int PORT;
+extern int TOKEN_EXPIRY;
+extern int MAX_THREADS;
+
+extern bool add_user(const std::string& username, const std::string& password);
 
 const std::string style_css = R"ELCSS(:root {
   --bg-light: #ffffff;
@@ -242,13 +248,6 @@ const std::string panel_html = R"HTML(<!DOCTYPE html>
 </html>
 )HTML";
 
-extern std::string DB_PATH;
-extern int PORT;
-extern int TOKEN_EXPIRY;
-
-extern bool add_user(const std::string& username, const std::string& password);
-
-
 bool initialize_database() {
     if (std::filesystem::exists(DB_PATH)) return true;
 
@@ -294,10 +293,16 @@ std::string get_base_path() {
     std::string app_path;
     if (DEV_MODE)
     {
-      app_path = std::string(home) + "/Documentos/dev/web-interface-atlantis";      
+      namespace fs = std::filesystem;
+      // Ruta del ejecutable
+      fs::path exePath = fs::canonical("/proc/self/exe");
+      // Subir un nivel desde el directorio del ejecutable
+      fs::path basePath = exePath.parent_path().parent_path();
+      app_path = basePath;      
     }else{
       app_path = std::string(home) + "/.web-atlantis";
     }
+    debug_log(app_path);
     return app_path;
 }
 
@@ -340,17 +345,16 @@ void load_or_create_config() {
 
     std::ifstream infile(config_path);
     if (!infile.is_open()) {
-        // Crear config por defecto
         std::ofstream outfile(config_path);
         outfile << "DB_PATH=" << DB_PATH << "\n";
         outfile << "PORT=" << PORT << "\n";
         outfile << "TOKEN_EXPIRY=" << TOKEN_EXPIRY << "\n";
+        outfile << "MAX_THREADS=" << MAX_THREADS << "\n";
         outfile.close();
-        std::cout << "Archivo de configuración creado en " << config_path << "\n";
+        debug_log("Archivo de configuración por defecto creado...");
         return;
     }
 
-    // Leer config existente
     std::unordered_map<std::string, std::string> config;
     std::string line;
     while (std::getline(infile, line)) {
@@ -369,10 +373,11 @@ void load_or_create_config() {
 
     if (config.count("PORT")) {
         int port = std::stoi(config["PORT"]);
+        //evitar puertos privilegiados.
         if (port >= 1024 && port <= 65535) {
             PORT = port;
         } else {
-            std::cerr << "Valor inválido para PORT. Usando por defecto: " << PORT << "\n";
+            debug_log("Valor inválido para PORT. Usando por defecto: " + std::to_string(PORT) + "\n");
         }
     }
 
@@ -381,7 +386,7 @@ void load_or_create_config() {
         if (expiry > 0) {
             TOKEN_EXPIRY = expiry;
         } else {
-            std::cerr << "TOKEN_EXPIRY inválido. Usando por defecto: " << TOKEN_EXPIRY << "\n";
+            debug_log("TOKEN_EXPIRY inválido. Usando por defecto: " + std::to_string(TOKEN_EXPIRY) + "\n");
         }
     }
 }
@@ -393,8 +398,3 @@ std::string get_public_path() {
 std::string get_log_path() {
     return get_base_path() + "/server.log";
 }
-
-// void debug_log(const std::string& msg) {
-//     if (DEBUG_MODE) std::cerr << "[DEBUG] " << msg << std::endl;
-//     if (LOG_MODE && log_file.is_open()) log_file << "[LOG] " << msg << std::endl;
-// }

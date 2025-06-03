@@ -10,16 +10,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (newSection === currentSection) return;
 
     const direction = Array.from(sections).indexOf(newSection) > Array.from(sections).indexOf(currentSection)
-      ? 'left' : 'rigth';
-    console.log(direction);
+      ? 'left' : 'right';
     currentSection.classList.remove('active');
     currentSection.classList.add(`fade-out-${direction}`);
-
-    newSection.classList.add('active');
+    newSection.classList.add(`fade-in-${direction}`);
 
     setTimeout(() => {
       currentSection.classList.remove(`fade-out-${direction}`);
-    }, 400);
+      newSection.classList.remove(`fade-in-${direction}`);
+      newSection.classList.add('active');
+    }, 300);
   }
 
   tabs.forEach(tab => {
@@ -35,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const response = await fetch(endpoint);
       const json = await response.json();
-      console.log('Datos recibidos:', json);
     } catch (error) {
       console.error('Error al obtener datos:', error);
     }
@@ -162,8 +161,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const elapsed = now - start;
       const progress = Math.min(elapsed / duration, 1);
 
-      if (type === 'bar') drawBarChart(ctx, data, labels, progress);
-      else drawLineChart(ctx, data, labels, progress);
+      if (type === 'bar') {
+        drawBarChart(ctx, data, labels, progress);
+      }else{
+        drawLineChart(ctx, data, labels, progress);
+      }
 
       if (progress < 1) requestAnimationFrame(animate);
     }

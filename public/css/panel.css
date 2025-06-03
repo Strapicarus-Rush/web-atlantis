@@ -17,7 +17,7 @@
 
   --radius: 1rem;
   --padding: 1rem;
-  --transition-speed: 0.5s;
+  --transition-speed: 0.4s;
 }
 
 html[data-theme='light'] {
@@ -80,6 +80,11 @@ main {
   overflow-x: hidden;
 }
 
+toggleTheme {
+    flex-direction: column;
+    align-items: center;
+}
+
 /* Tabs/Nav */
 nav {
   flex-grow: 1;
@@ -88,10 +93,6 @@ nav {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
-}
-toggleTheme {
-    flex-direction: column;
-    align-items: center;
 }
 
 .tab {
@@ -119,9 +120,10 @@ toggleTheme {
 .content {
   position: absolute;
   top: 0;
-  left: 50%;
-/*  transform: translateX(-50%) translateY(40px);*/
   opacity: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%); /* centrado */
   pointer-events: none;
   transition: opacity var(--transition-speed), transform var(--transition-speed);
   width: 100%;
@@ -133,36 +135,37 @@ toggleTheme {
 }
 
 .content.active {
-  position: relative;
+  position: absolute;
   opacity: 1;
-/*  transform: translateX(-50%) translateY(0);*/
   pointer-events: auto;
   z-index: 1;
+  transform: translate(-50%, -50%)
 }
 
 .content.fade-out-left {
-  transform: translateX(-80px);
+  transform: translate(-150%, -50%);
   opacity: 0;
 }
 
 .content.fade-out-right {
-  transform: translateX(80px);
+  transform: translate(150%, -50%);
   opacity: 0;
 }
 
 .content.fade-in-left {
-  transform: translateX(-50%);
+  transform: translate(150%, -50%);
   opacity: 0;
 }
 
 .content.fade-in-right {
-  transform: translateX(50%);
+  transform: translate(-150%, -50%);
   opacity: 0;
 }
 
 .fade-out-left,
-.fade-out-right {
-  opacity: 0;
+.fade-out-right,
+.fade-in-left,
+.fade-in-right {
   pointer-events: none;
   z-index: 0;
   transition: opacity var(--transition-speed), transform var(--transition-speed);
