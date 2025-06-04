@@ -211,4 +211,167 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Error al actualizar gráfico:', error);
     }
   });
+
+  // =============================================================
+  //  LÓGICA PARA LOS BOTONES DEL MENÚ PRINCIPAL (div.menu-buttons)
+  // =============================================================
+  const menuContainer = document.querySelector('.menu-buttons');
+  if (menuContainer) {
+    menuContainer.addEventListener('click', async (e) => {
+      // Si no clicamos un <button>, salimos
+      if (e.target.tagName !== 'BUTTON') return;
+
+      const btn = e.target;
+      const action = btn.dataset.action; // por ejemplo: "start-server", "edit-config", etc.
+      try {
+        switch (action) {
+          case 'start-server':
+            await fetch('/api/start-server', { method: 'POST' });
+            alert('Solicitud de inicio enviada.');
+            break;
+
+          case 'stop-server':
+            await fetch('/api/stop-server', { method: 'POST' });
+            alert('Solicitud de detención enviada.');
+            break;
+
+          case 'restart-server':
+            await fetch('/api/restart-server', { method: 'POST' });
+            alert('Solicitud de reinicio enviada.');
+            break;
+
+          case 'edit-config':
+            // redirigir a tu vista de edición
+            window.location.href = '/panel/edit-config';
+            break;
+
+          case 'performance-monitor':
+            window.location.href = '/panel/performance';
+            break;
+
+          case 'view-logs':
+            window.location.href = '/panel/logs';
+            break;
+
+          // Los botones sin data-action (p.ej. id="openPlayerMgmt", etc.) 
+          // no tienen acción aquí; su listener abre un diálogo directamente.
+          default:
+            break;
+        }
+      } catch (err) {
+        console.error('Error en menú principal:', err);
+        alert('Error al ejecutar la acción: ' + (btn.textContent || action));
+      }
+    });
+  }
+
+
+  /* ===========================================================
+     2) GESTIÓN DE DIÁLOGOS (Modales)
+     =========================================================== */
+  const dialogs = {
+    quick: document.getElementById('quickCommandsDialog'),
+    playerMgmt: document.getElementById('playerMgmtDialog'),
+    pluginMgmt: document.getElementById('pluginMgmtDialog'),
+    worldMgmt: document.getElementById('worldMgmtDialog'),
+    backupMgmt: document.getElementById('backupMgmtDialog'),
+    lightning: document.getElementById('lightningCommandsDialog'),
+    itemCmds: document.getElementById('itemCommandsDialog'),
+    mobCmds: document.getElementById('mobCommandsDialog'),
+    playerCmds: document.getElementById('playerCommandsDialog'),
+    worldCmds: document.getElementById('worldCommandsDialog')
+  };
+
+  // Botones "Cerrar" de cada diálogo
+  document.querySelectorAll('.close-dialog').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('dialog').close();
+    });
+  });
+
+  // Abrir un diálogo concreto al hacer clic
+  document.getElementById('openQuickCommands').addEventListener('click', () => {
+    dialogs.quick.showModal();
+  });
+  document.getElementById('openPlayerMgmt').addEventListener('click', () => {
+    dialogs.playerMgmt.showModal();
+  });
+  document.getElementById('openPluginMgmt').addEventListener('click', () => {
+    dialogs.pluginMgmt.showModal();
+  });
+  document.getElementById('openWorldMgmt').addEventListener('click', () => {
+    dialogs.worldMgmt.showModal();
+  });
+  document.getElementById('openBackupMgmt').addEventListener('click', () => {
+    dialogs.backupMgmt.showModal();
+  });
+  document.getElementById('openLightningCommands').addEventListener('click', () => {
+    dialogs.lightning.showModal();
+  });
+
+
+  // Opción 5: Comando personalizado
+  document.getElementById('customCommandBtn').addEventListener('click', async () => {
+    const cmd = prompt('Escribe tu comando personalizado:');
+    if (!cmd) return;
+    try {
+      await fetch('/api/send-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd })
+      });
+      alert('Comando enviado: ' + cmd);
+    } catch (err) {
+      console.error(err);
+      alert('Error al enviar el comando.');
+    }
+  });
+
+  // ===========================================================
+  //  ENVÍO DE PETICIONES DESDE CADA BOTÓN .action-btn
+  // ===========================================================
+  document.querySelectorAll('.action-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const endpoint = btn.dataset.endpoint;
+      try {
+        // Si la acción requiere parámetro extra (por ejemplo, kickear), preguntar aquí
+        if (endpoint.endsWith('/player/kick')) {
+          const nombre = prompt('Ingresa nombre de jugador a kickear:');
+          if (!nombre) return;
+          await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player: nombre })
+          });
+          alert(`Kick de ${nombre} enviado.`);
+        }
+        else {
+          // Para la mayoría, alcanza con POST sin cuerpo adicional
+          await fetch(endpoint, { method: 'POST' });
+          alert('Comando enviado: ' + btn.textContent.trim());
+        }
+      }
+      catch (err) {
+        console.error('Error en comando', endpoint, err);
+        alert('Error al ejecutar: ' + btn.textContent.trim());
+      }
+      finally {
+        // Cierra el modal que contenga este botón
+        btn.closest('dialog')?.close();
+      }
+    });
+  });
+
+  // ===========================================================
+  //  CERRAR DIÁLOGOS con botón .close-dialog (ya existía pero verifícalo)
+  // ===========================================================
+  document.querySelectorAll('.close-dialog').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('dialog').close();
+    });
+  });
+
+
+
+
 });

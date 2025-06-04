@@ -3,6 +3,240 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel de Control</title>
+  <link rel="stylesheet" href="css/panel.css" />
+  <script src="js/theme.js" defer></script>
+</head>
+<body>
+  <header>
+    <nav>
+      <button data-tab="status" class="tab active">Status</button>
+      <button data-tab="main-menu" class="tab">Menú Principal</button>
+      <button data-tab="comandos" class="tab">Comandos Rápidos</button>
+      <button data-tab="Config" class="tab">Config</button>
+      <button id="toggleTheme">🌓</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Status Panel -->
+    <section data-content="status" class="content active">
+      <canvas id="chartCanvas" width="600" height="300" data-type="bar"></canvas>
+      <div class="chart-controls">
+        <button id="refreshChart" data-endpoint="/api/chart-data">Actualizar gráfico</button>
+        <button id="toggleChartType">Cambiar a Línea</button>
+      </div>
+    </section>
+
+    <!-- Menú Principal -->
+    <section data-content="main-menu" class="content">
+      <h2>Menú Principal</h2>
+      <div class="menu-buttons">
+        <button data-action="start-server">1. Iniciar Servidor</button>
+        <button data-action="stop-server">2. Detener Servidor</button>
+        <button data-action="restart-server">3. Reiniciar Servidor</button>
+        <button id="openQuickCommands">4. Comandos Rápidos</button>
+        <button id="customCommandBtn">5. Comando Personalizado</button>
+        <button id="openPlayerMgmt">6. Gestión de Jugadores</button>
+        <button id="openPluginMgmt">7. Gestión de Plugins/Mods</button>
+        <button id="openWorldMgmt">8. Gestión de Mundos</button>
+        <button id="openBackupMgmt">9. Gestión de Backups</button>
+        <button data-action="edit-config">10. Editar Configuración</button>
+        <button data-action="performance-monitor">11. Monitor de Rendimiento</button>
+        <button data-action="view-logs">12. Ver Logs</button>
+        <button id="openLightningCommands">13. Comandos de Rayos</button>
+      </div>
+    </section>
+
+    <!-- Comandos Rápidos -->
+    <section data-content="comandos" class="content">
+      <p>Vista de envio de conmandos...</p>
+      <button id="loadData" data-endpoint="/api/data">Cargar Datos</button>
+    </section>
+
+    <!-- Configuración -->
+    <section data-content="Config" class="content">
+      <h2>Configuraciones</h2>
+      <p>Aquí puedes ajustar las opciones de tu servidor y el panel.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Thanks to Jaime, Strapicarus</p>
+  </footer>
+
+  <!-- =======================================================
+       DIÁLOGOS / SUBMENÚS (cada opción ejecuta POST)
+       ======================================================= -->
+
+<!-- 1) Comandos Rápidos: categorías -->
+<dialog id="quickCommandsDialog">
+  <h3>Categorías de Comandos Rápidos</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/quick/world">🌍 Comandos de Mundo</button>
+    <button class="action-btn" data-endpoint="/api/quick/item">🎁 Comandos de Items</button>
+    <button class="action-btn" data-endpoint="/api/quick/player">👤 Comandos de Jugador</button>
+    <button class="action-btn" data-endpoint="/api/quick/mob">👹 Comandos de Mobs</button>
+    <button class="action-btn" data-endpoint="/api/quick/special">⚡ Comandos Especiales</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 2) Gestión de Jugadores -->
+<dialog id="playerMgmtDialog">
+  <h3>Gestión de Jugadores</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/player/list">Ver jugadores conectados</button>
+    <button class="action-btn" data-endpoint="/api/player/kick">Kickear jugador</button>
+    <button class="action-btn" data-endpoint="/api/player/ban">Banear jugador</button>
+    <button class="action-btn" data-endpoint="/api/player/unban">Desbanear jugador</button>
+    <button class="action-btn" data-endpoint="/api/player/whitelist/add">Agregar a whitelist</button>
+    <button class="action-btn" data-endpoint="/api/player/whitelist/remove">Remover de whitelist</button>
+    <button class="action-btn" data-endpoint="/api/player/whitelist/list">Ver whitelist</button>
+    <button class="action-btn" data-endpoint="/api/player/op/add">Dar OP a jugador</button>
+    <button class="action-btn" data-endpoint="/api/player/op/remove">Quitar OP a jugador</button>
+    <button class="action-btn" data-endpoint="/api/player/op/list">Ver lista de OPs</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 3) Gestión de Plugins/Mods -->
+<dialog id="pluginMgmtDialog">
+  <h3>Gestión de Plugins/Mods</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/plugin/list">Listar plugins</button>
+    <button class="action-btn" data-endpoint="/api/plugin/mods/list">Listar mods</button>
+    <button class="action-btn" data-endpoint="/api/plugin/reload">Recargar plugins</button>
+    <button class="action-btn" data-endpoint="/api/plugin/info">Información de plugin específico</button>
+    <button class="action-btn" data-endpoint="/api/plugin/toggle">Habilitar/Deshabilitar plugin</button>
+    <button class="action-btn" data-endpoint="/api/plugin/logs">Ver logs de plugins</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 4) Gestión de Mundos -->
+<dialog id="worldMgmtDialog">
+  <h3>Gestión de Mundos</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/world/info">Información del mundo</button>
+    <button class="action-btn" data-endpoint="/api/world/change-spawn">Cambiar spawn del mundo</button>
+    <button class="action-btn" data-endpoint="/api/world/regenerate-chunks">Regenerar chunks</button>
+    <button class="action-btn" data-endpoint="/api/world/clear-entities">Limpiar entidades</button>
+    <button class="action-btn" data-endpoint="/api/world/save">Guardar mundo</button>
+    <button class="action-btn" data-endpoint="/api/world/toggle-autosave">Desactivar/Activar guardado automático</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 5) Gestión de Backups -->
+<dialog id="backupMgmtDialog">
+  <h3>Gestión de Backups</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/backup/full">Crear backup completo</button>
+    <button class="action-btn" data-endpoint="/api/backup/world-only">Crear backup solo del mundo</button>
+    <button class="action-btn" data-endpoint="/api/backup/list">Listar backups</button>
+    <button class="action-btn" data-endpoint="/api/backup/restore">Restaurar backup</button>
+    <button class="action-btn" data-endpoint="/api/backup/delete">Eliminar backup</button>
+    <button class="action-btn" data-endpoint="/api/backup/configure-path">Configurar ruta de backups</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 6) Comandos de Rayos -->
+<dialog id="lightningCommandsDialog">
+  <h3>⚡ Comandos de Rayos Avanzados</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/lightning/simple">Rayo simple en jugador</button>
+    <button class="action-btn" data-endpoint="/api/lightning/storm">Tormenta de rayos en jugador</button>
+    <button class="action-btn" data-endpoint="/api/lightning/punishment">Rayo de castigo (con efectos)</button>
+    <button class="action-btn" data-endpoint="/api/lightning/blessing">Rayo de bendición (sin daño)</button>
+    <button class="action-btn" data-endpoint="/api/lightning/area">Lluvia de rayos en área</button>
+    <button class="action-btn" data-endpoint="/api/lightning/follow">Rayo siguiendo al jugador</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 7) Comandos de Items -->
+<dialog id="itemCommandsDialog">
+  <h3>🎁 Comandos de Items</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/item/give/diamond_sword">Espada de diamante</button>
+    <button class="action-btn" data-endpoint="/api/item/give/diamond_pickaxe">Pico de diamante</button>
+    <button class="action-btn" data-endpoint="/api/item/give/diamond_armor">Armadura de diamante completa</button>
+    <button class="action-btn" data-endpoint="/api/item/give/elytra">Élitros</button>
+    <button class="action-btn" data-endpoint="/api/item/give/totem_of_undying">Tótem de la inmortalidad</button>
+    <button class="action-btn" data-endpoint="/api/item/give/enchanted_golden_apple">Manzana dorada encantada</button>
+    <button class="action-btn" data-endpoint="/api/item/give/netherite_sword">Espada de netherita</button>
+    <button class="action-btn" data-endpoint="/api/item/give/bow">Arco</button>
+    <button class="action-btn" data-endpoint="/api/item/give/arrow">Flechas</button>
+    <button class="action-btn" data-endpoint="/api/item/give/ender_pearl">Perlas de ender</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 8) Comandos de Mobs -->
+<dialog id="mobCommandsDialog">
+  <h3>👹 Comandos de Mobs</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/mob/summon-on-player">Summon mob en jugador</button>
+    <button class="action-btn" data-endpoint="/api/mob/execute-summon">Execute at jugador – Summon mob</button>
+    <button class="action-btn" data-endpoint="/api/mob/summon-multiple">Summon múltiples mobs</button>
+    <button class="action-btn" data-endpoint="/api/mob/summon-with-effects">Summon mob con efectos</button>
+    <button class="action-btn" data-endpoint="/api/mob/clear-specific">Limpiar mobs específicos</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 9) Comandos de Jugador -->
+<dialog id="playerCommandsDialog">
+  <h3>👤 Comandos de Jugador</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/player/tp/spawn">Teletransportar a spawn</button>
+    <button class="action-btn" data-endpoint="/api/player/tp/coords">Teletransportar a coordenadas</button>
+    <button class="action-btn" data-endpoint="/api/player/gamemode/creative">Modo creativo</button>
+    <button class="action-btn" data-endpoint="/api/player/gamemode/survival">Modo supervivencia</button>
+    <button class="action-btn" data-endpoint="/api/player/gamemode/adventure">Modo aventura</button>
+    <button class="action-btn" data-endpoint="/api/player/gamemode/spectator">Modo espectador</button>
+    <button class="action-btn" data-endpoint="/api/player/heal">Curar jugador</button>
+    <button class="action-btn" data-endpoint="/api/player/feed">Alimentar jugador</button>
+    <button class="action-btn" data-endpoint="/api/player/clear-inventory">Limpiar inventario</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+<!-- 10) Comandos de Mundo Rápidos -->
+<dialog id="worldCommandsDialog">
+  <h3>🌍 Comandos de Mundo</h3>
+  <div class="dialog-buttons">
+    <button class="action-btn" data-endpoint="/api/world/time/day">Establecer el día</button>
+    <button class="action-btn" data-endpoint="/api/world/time/night">Establecer la noche</button>
+    <button class="action-btn" data-endpoint="/api/world/time/noon">Establecer mediodía</button>
+    <button class="action-btn" data-endpoint="/api/world/time/midnight">Establecer medianoche</button>
+    <button class="action-btn" data-endpoint="/api/world/weather/clear">Clima despejado</button>
+    <button class="action-btn" data-endpoint="/api/world/weather/rain">Activar lluvia</button>
+    <button class="action-btn" data-endpoint="/api/world/weather/thunder">Activar tormenta</button>
+    <button class="action-btn" data-endpoint="/api/world/difficulty/peaceful">Dificultad pacífica</button>
+    <button class="action-btn" data-endpoint="/api/world/difficulty/hard">Dificultad difícil</button>
+    <button class="action-btn" data-endpoint="/api/world/gamerule/stop-daylight">Detener ciclo día/noche</button>
+    <button class="action-btn" data-endpoint="/api/world/gamerule/start-daylight">Activar ciclo día/noche</button>
+    <button class="action-btn" data-endpoint="/api/world/gamerule/disable-mob-spawn">Desactivar spawn de mobs</button>
+    <button class="action-btn" data-endpoint="/api/world/gamerule/enable-mob-spawn">Activar spawn de mobs</button>
+  </div>
+  <button class="close-dialog">Cerrar</button>
+</dialog>
+
+
+  <script src="js/panel.js" defer></script>
+</body>
+</html>
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="es" data-theme="ligth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Prototipo UI con Canvas Dinámico</title>
   <link rel="stylesheet" href="css/panel.css" />
   <script src="js/theme.js" defer></script>
@@ -40,8 +274,8 @@
   </main>
 
   <footer>
-    <p>&copy; 2025 Prototipo UI</p>
+    <p></p>
   </footer>
   <script src="js/panel.js" defer></script>
 </body>
-</html>
+</html> -->

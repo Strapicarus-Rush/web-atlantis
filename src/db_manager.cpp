@@ -10,7 +10,8 @@ class DBManager {
 public:
     explicit DBManager(const std::string& db_path) {
         if (sqlite3_open(db_path.c_str(), &db) != SQLITE_OK) {
-            std::cerr << "Failed to open DB: " << sqlite3_errmsg(db) << '\n';
+            debug_log("Failed to open DB: " + sqlite3_errmsg(db))
+            // std::cerr << "Failed to open DB: " << sqlite3_errmsg(db) << '\n';
             db = nullptr;
         }
     }

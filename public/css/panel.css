@@ -9,7 +9,7 @@
   --clr-header-dark: #1e1e1e;
   --clr-footer-dark: #1a1a1a;
 
-  --clr-accent1-light: #4a90e2; /*#875b9e;*/
+  --clr-accent1-light: #4a90e2;
   --clr-accent2-light: #b68dbf;
 
   --clr-accent1-dark: #c99bd6;
@@ -54,7 +54,6 @@ body {
   min-height: 100vh;
 }
 
-/* Layout */
 header {
   background-color: var(--clr-header);
   color: var(--clr-text);
@@ -85,7 +84,6 @@ toggleTheme {
     align-items: center;
 }
 
-/* Tabs/Nav */
 nav {
   flex-grow: 1;
   display: flex;
@@ -116,14 +114,13 @@ nav {
   color: var(--clr-bg);
 }
 
-/* Content Sections */
 .content {
   position: absolute;
   top: 0;
   opacity: 0;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%); /* centrado */
+  transform: translate(-50%, -50%);
   pointer-events: none;
   transition: opacity var(--transition-speed), transform var(--transition-speed);
   width: 100%;
@@ -171,7 +168,6 @@ nav {
   transition: opacity var(--transition-speed), transform var(--transition-speed);
 }
 
-/* Buttons */
 button {
   background-color: var(--clr-accent);
   border: none;
@@ -182,7 +178,6 @@ button {
   transition: background-color var(--transition-speed) ease;
 }
 
-/* Styled Elements */
 section, p, ul, dialog, fieldset, button, blockquote, cite, span, datalist {
   border-radius: var(--radius);
   margin-bottom: 1rem;
@@ -197,7 +192,7 @@ canvas {
   max-width: 100vh;
   height: auto;
   display: block;
-  margin: 1rem auto;
+  margin: 0.2rem auto;
 }
 
 .chart-controls {
@@ -225,7 +220,96 @@ footer {
   border-radius: var(--radius) var(--radius) 0 0;
 }
 
-/* Responsive */
+/* ============================
+   ESTILOS: MENÚ PRINCIPAL
+   ============================ */
+.menu-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.menu-buttons button {
+  background-color: var(--clr-accent2);
+  border: none;
+  padding: 0.75rem 1rem;
+  color: var(--clr-text);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: center;
+  font-size: 1rem;
+  transition: background-color var(--transition-speed);
+}
+
+.menu-buttons button:hover {
+  background-color: var(--clr-accent1);
+}
+
+
+/* ========== Centrar todos los <dialog> ========== */
+dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: none;
+  border-radius: var(--radius);
+  padding: var(--padding);
+  width: 90%;
+  max-width: 500px;
+  background-color: var(--clr-bg);
+  color: var(--clr-text);
+  box-shadow: 0 0 1rem rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+/* Fondo semitransparente al usar showModal() */
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* ======== Contenedor de botones dentro de <dialog> ======== */
+.dialog-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* ======== Botones que disparan la acción POST ======== */
+.dialog-buttons .action-btn {
+  background-color: var(--clr-accent2);
+  border: none;
+  padding: 0.6rem 1rem;
+  color: var(--clr-text);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--transition-speed);
+}
+
+.dialog-buttons .action-btn:hover {
+  background-color: var(--clr-accent1);
+}
+
+/* ======== Botón “Cerrar” dentro de cada diálogo ======== */
+dialog .close-dialog {
+  display: block;
+  margin: 0 auto;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: var(--clr-accent2);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color var(--transition-speed);
+}
+
+dialog .close-dialog:hover {
+  background-color: var(--clr-accent1);
+}
+
 @media (max-width: 600px) {
   nav {
   flex-grow: 1;
