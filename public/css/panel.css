@@ -1,23 +1,21 @@
 :root {
-  --clr-bg-light: #f5f5f5;
-  --clr-text-light: #222222;
-  --clr-header-light: #e0e0e0;
-  --clr-footer-light: #d0d0d0;
 
-  --clr-bg-dark: #121212;
-  --clr-text-dark: #f0f0f0;
-  --clr-header-dark: #1e1e1e;
-  --clr-footer-dark: #1a1a1a;
+--clr-bg-light: #ffffff;
+--clr-text-light: #2b2b2b;
+--clr-header-light: #f0f0f0;
+--clr-footer-light: #e0e0e0;
+--clr-accent1-light: #2ecc71;
+--clr-accent2-light: #00bfa6;
 
-  --clr-accent1-light: #4a90e2;
-  --clr-accent2-light: #b68dbf;
-
-  --clr-accent1-dark: #c99bd6;
-  --clr-accent2-dark: #a96fbe;
+--clr-bg-dark: #101010;
+--clr-text-dark: #eeeeee;
+--clr-header-dark: #1a1a1a;
+--clr-footer-dark: #161616;
+--clr-accent1-dark: #27ae60;
 
   --radius: 1rem;
-  --padding: 1rem;
-  --transition-speed: 0.4s;
+  --padding: 0.1rem;
+  --transition-speed: 0.6s;
 }
 
 html[data-theme='light'] {
@@ -48,7 +46,7 @@ body {
   font-family: 'Segoe UI', sans-serif;
   background-color: var(--clr-bg);
   color: var(--clr-text);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -88,9 +86,9 @@ nav {
   flex-grow: 1;
   display: flex;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.2rem;
+  margin-bottom: 0.1rem;
 }
 
 .tab {
@@ -100,7 +98,7 @@ nav {
   border-radius: var(--radius);
   cursor: pointer;
   color: inherit;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .tab:hover,
@@ -115,57 +113,30 @@ nav {
 }
 
 .content {
-  position: absolute;
-  top: 0;
+  display: none;
   opacity: 0;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  transition: opacity var(--transition-speed), transform var(--transition-speed);
+  transform: scale(0.50);
   width: 100%;
-  max-width: 100vh;
+  max-width: 100%;
   padding: var(--padding);
+  transition: opacity var(--transition-speed), transform var(--transition-speed);
   box-sizing: border-box;
   overflow-y: auto;
   text-align: center;
 }
 
 .content.active {
-  position: absolute;
+  display: block;
   opacity: 1;
+  transform: scale(1);
   pointer-events: auto;
-  z-index: 1;
-  transform: translate(-50%, -50%)
+  animation: fadeZoomIn 0.6s ease forwards;
 }
 
-.content.fade-out-left {
-  transform: translate(-150%, -50%);
-  opacity: 0;
-}
-
-.content.fade-out-right {
-  transform: translate(150%, -50%);
-  opacity: 0;
-}
-
-.content.fade-in-left {
-  transform: translate(150%, -50%);
-  opacity: 0;
-}
-
-.content.fade-in-right {
-  transform: translate(-150%, -50%);
-  opacity: 0;
-}
-
-.fade-out-left,
-.fade-out-right,
-.fade-in-left,
-.fade-in-right {
+.content.fade-out {
+  display: block;
+  animation: fadeOut 0.6s ease forwards;
   pointer-events: none;
-  z-index: 0;
-  transition: opacity var(--transition-speed), transform var(--transition-speed);
 }
 
 button {
@@ -180,7 +151,8 @@ button {
 
 section, p, ul, dialog, fieldset, button, blockquote, cite, span, datalist {
   border-radius: var(--radius);
-  margin-bottom: 1rem;
+  margin-bottom: 0.1rem;
+  margin-top: 0.1rem;
 }
 
 canvas {
@@ -188,8 +160,8 @@ canvas {
   border-radius: var(--radius);
   border: 0.1rem solid var(--clr-accent);
   width: 100%;
-  min-width: 400px;
-  max-width: 100vh;
+  min-width: 328px;
+  max-width: 100dvh;
   height: auto;
   display: block;
   margin: 0.2rem auto;
@@ -226,8 +198,38 @@ footer {
 .menu-buttons {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.6rem;
+  margin: 2rem auto;
+  width: min(100%, clamp(300px, 80vw, 800px));
+  padding: 0 1rem;
+  justify-content: center;
+}
+
+.menu-buttons button {
+  background-color: var(--clr-accent2);
+  color: var(--clr-text);
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--clr-accent1);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.menu-buttons button:hover {
+  background-color: var(--clr-accent1);
+  transform: scale(1.03);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+/*.menu-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.1rem;
+  margin: 1rem auto;
+  max-width: 600px;
+  width: 100%; 
 }
 
 .menu-buttons button {
@@ -244,7 +246,7 @@ footer {
 
 .menu-buttons button:hover {
   background-color: var(--clr-accent1);
-}
+}*/
 
 
 /* ========== Centrar todos los <dialog> ========== */
@@ -253,10 +255,10 @@ dialog {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  border: none;
+  border: 1px solid var(--clr-accent1);
   border-radius: var(--radius);
   padding: var(--padding);
-  width: 90%;
+  width: 90dvw;
   max-width: 500px;
   background-color: var(--clr-bg);
   color: var(--clr-text);
@@ -310,13 +312,155 @@ dialog .close-dialog:hover {
   background-color: var(--clr-accent1);
 }
 
-@media (max-width: 600px) {
-  nav {
-  flex-grow: 1;
+#console-output {
+  background-color: var(--clr-bg);
+  color: var(--clr-text);
+  text-align: left;
+  /*background: #000;*/
+  border: 1px solid #0f0;
+  padding: 1em;
+  min-height: 80dvh;
+  max-height: 80dvh;
+  max-width: 800px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 0.9em;
+  margin:  0 auto;
+  display: block;
+}
+
+/*#instanceSelector {
+  width: 100%;
+  max-width: 100%;
+  background-color: var(--clr-bg);
+  color: var(--clr-text);
+  border: 1px solid var(--clr-accent1);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+  font-size: 1rem;
+  transition: background-color var(--transition-speed), color var(--transition-speed);
+}
+
+#instanceSelector:hover {
+  background-color: var(--clr-accent1);
+  color: var(--clr-bg);
+}*/
+
+.instance-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+/* Tarjetas individuales */
+.instance-card {
+  background-color: var(--clr-bg);
+  border: 2px solid var(--clr-accent1);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+  padding: 1rem;
+  cursor: pointer;
+  color: var(--clr-text);
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    background-color 0.3s ease;
   display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.2rem;
-  margin-bottom: 0.1rem;
+  flex-direction: column;
+  user-select: none;
+}
+
+.instance-card:hover {
+  border-color: var(--clr-accent1);
+  box-shadow: 0 8px 12px rgba(0,0,0,0.25);
+  background-color: var(--clr-header);
+}
+
+.instance-card.selected {
+  border-color: var(--clr-accent2);
+  box-shadow: 0 0 0 3px var(--clr-accent2);
+  background-color: var(--clr-header);
+}
+
+.instance-card h3 {
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--clr-accent1);
+}
+
+.instance-card p {
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+  line-height: 1.3;
+}
+
+@keyframes fadeZoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
+@media (max-width: 600px) {
+
+  nav {
+    flex-grow: 0;
+    display: flex;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 0.02rem;
+    margin-bottom: 0.01rem;
+  }
+
+  header {
+    background-color: var(--clr-header);
+    color: var(--clr-text);
+    padding: var(--padding);
+    text-align: center;
+    border-radius: 0 0 var(--radius) var(--radius);
+    display: ruby;
+  }
+
+  #console-output {
+    background-color: var(--clr-bg);
+    color: var(--clr-text);
+    text-align: left;
+    /*background: #000;*/
+    border: 1px solid #0f0;
+    padding: 1em;
+    min-height: 80dvh;
+    max-height: 80dvh;
+    max-width: 90dvw;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-size: 0.9em;
+    margin:  0 auto;
+    display: block;
+  }
+
+  /*#instanceSelector {
+    font-size: 1rem;
+    padding: 0.6rem;
+  }*/
+  .instance-card {
+    width: 100%;
+    max-width: 300px;
   }
 }

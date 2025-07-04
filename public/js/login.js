@@ -17,3 +17,7 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     status.textContent = "Error: Usuario o contraseña incorrectos.";
   }
 });
+
+window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('user').focus();
+  });

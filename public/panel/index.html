@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Panel de Control</title>
   <link rel="stylesheet" href="css/panel.css" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#4a90e2">
+  <link rel="icon" type="image/png" href="/assets/images/favicons/favicon.png" sizes="96x96">
+  <link rel="shortcut icon" href="/assets/images/favicons/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/images/favicons/favicon.png">
   <script src="js/theme.js" defer></script>
 </head>
 <body>
@@ -12,21 +17,55 @@
     <nav>
       <button data-tab="status" class="tab active">Status</button>
       <button data-tab="main-menu" class="tab">Menú Principal</button>
-      <button data-tab="comandos" class="tab">Comandos Rápidos</button>
+      <button data-tab="console-view" class="tab">Consola</button>
       <button data-tab="Config" class="tab">Config</button>
       <button id="toggleTheme">🌓</button>
     </nav>
+    <p><strong>Instancia actual:</strong> <span data-instance-name>—</span></p>
   </header>
 
   <main>
     <!-- Status Panel -->
-    <section data-content="status" class="content active">
-      <canvas id="chartCanvas" width="600" height="300" data-type="bar"></canvas>
-      <div class="chart-controls">
-        <button id="refreshChart" data-endpoint="/api/chart-data">Actualizar gráfico</button>
-        <button id="toggleChartType">Cambiar a Línea</button>
+    <!-- <section data-content="server-status" class="content active">
+      <div class="menu-buttons" style="text-align: left;">
+        <label for="instanceSelector"><strong>Selecciona una instancia:</strong></label>
+        <select id="instanceSelector"
+                data-endpoint="/api/instances"
+                data-field-id="id"
+                data-field-label="screen_name"
+                data-auto-load="true">
+        </select>
       </div>
+      <div class="menu-buttons" style="text-align: left;" data-bind="server-info">
+        <div style="border: 1px solid var(--clr-accent1); padding: 1rem;">
+          <p><strong>Servidor:</strong> <span data-key="screen_name">-</span></p>
+          <p><strong>Ruta:</strong> <span data-key="server_path">-</span></p>
+          <p><strong>Estado:</strong> <span data-key="status">-</span></p>
+          <p><strong>RAM Usada:</strong> <span data-key="ram_used">-</span></p>
+          <p><strong>Jugadores:</strong> <span data-key="player_count">-</span></p>
+          <p><strong>Backups:</strong> <span data-key="backup_path">-</span></p>
+        </div>
+      </div>
+      <div class="menu-buttons">
+        <button data-action="refresh" data-endpoint="/api/instances">Actualizar estado</button>
+        <button data-action="restart" data-endpoint="/api/instances/{id}/restart">Reiniciar</button>
+        <button data-action="backup" data-endpoint="/api/instances/{id}/backup">Crear backup</button>
+      </div>
+    </section> -->
+
+    <section data-content="status" class="content active" data-endpoint="/api/instances">
+      <div class="instance-cards"></div>
     </section>
+
+<!--     <section data-content="status" class="content active" data-endpoint="/api/instances">
+      <div id="instancesContainer" aria-label="Lista de instancias" role="list">
+
+      </div>
+      <div class="menu-buttons">
+        <button id="refreshInstances">Actualizar instancias</button>
+        <button id="someAction" disabled>Ejecutar acción en instancia</button>
+      </div>
+    </section> -->
 
     <!-- Menú Principal -->
     <section data-content="main-menu" class="content">
@@ -49,9 +88,9 @@
     </section>
 
     <!-- Comandos Rápidos -->
-    <section data-content="comandos" class="content">
-      <p>Vista de envio de conmandos...</p>
-      <button id="loadData" data-endpoint="/api/data">Cargar Datos</button>
+    <section data-content="console-view" class="content">
+      <pre id="console-output"></pre>
+      <!-- <button id="loadData" data-endpoint="/api/data">Cargar Datos</button> -->
     </section>
 
     <!-- Configuración -->

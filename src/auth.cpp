@@ -7,17 +7,20 @@
 #include <vector>
 #include <regex>
 #include <ctime>
-#include "debug_log.hpp"
+#include <stdexcept>
+#include "utils.hpp"
 
 inline std::string DB_PATH = "users.db";
 inline int TOKEN_EXPIRY = 3600;
 
-const std::string sing = "gsdSDGSD_:,$512512_12534-.,45@#)";
+static const std::string sing = "gsdSDGSD_:,$512512_12534-.,45@#)";
 
-// class DBManager;
-// DBManager* get_db_manager_instance();
+// extern bool DEV_MODE;
+extern void send_response(const int& client_sock, const std::string& status, const std::vector<char>& body, const std::string& content_type, const std::string& extra_headers = "");
+extern void send_error(const int& client_sock, const int& code, const bool& send_file = false);
+extern void close_client(const int& client_sock);
 
-uint32_t simple_hash(const std::string& str) {
+static uint32_t simple_hash(const std::string& str) {
     uint32_t h = 0x811C9DC5;
     for (char c : str) {
         h ^= (uint8_t)c;
@@ -26,7 +29,7 @@ uint32_t simple_hash(const std::string& str) {
     return h;
 }
 
-std::vector<uint8_t> runtime_transform(const std::string& base) {
+static const std::vector<uint8_t> runtime_transform(const std::string& base) {
     uint32_t seed = simple_hash(base);
     std::vector<uint8_t> transformed(base.begin(), base.end());
 
@@ -49,7 +52,7 @@ void secure_zero(void* data, size_t len) {
     while (len--) *ptr++ = 0;
 }
 
-std::string get_secret_key() {
+static const std::string get_secret_key() {
     std::vector<uint8_t> raw = runtime_transform(sing);
 
     std::string key(raw.begin(), raw.end());
@@ -58,19 +61,7 @@ std::string get_secret_key() {
     return key;
 }
 
-extern bool DEV_MODE;
-extern void send_response(int& client_sock, const std::string& status, const std::vector<char>& body, const std::string& content_type, const std::string& extra_headers = "");
-extern void send_error(int& client_sock, int code);
-extern void close_client(int& client_sock);
-
-std::vector<std::string> split(const std::string& str, char delim) {
-    std::vector<std::string> parts;
-    std::istringstream iss(str);
-    std::string s;
-    while (std::getline(iss, s, delim))
-        parts.push_back(s);
-    return parts;
-}
+// std::vector<std::string> split(const std::string& str, char delim); 
 
 std::string generate_salt(std::size_t length = 16) {
     static thread_local std::random_device rd;
@@ -255,35 +246,76 @@ bool validate_token(const std::string& token) {
     }
 }
 
-bool validate_user(const std::string& user, const std::string& pass, int& out_user_id) {
-    sqlite3* db;
-    if (sqlite3_open(DB_PATH.c_str(), &db) != SQLITE_OK) return false;
+// bool validate_user(const std::string& user, const std::string& pass, int& out_user_id) {
+//     sqlite3* db;
+//     if (sqlite3_open(DB_PATH.c_str(), &db) != SQLITE_OK) return false;
 
-    const char* query = "SELECT id, password FROM users WHERE username = ?";
-    sqlite3_stmt* stmt;
-    if (sqlite3_prepare_v2(db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+//     const char* query = "SELECT id, password FROM users WHERE username = ?";
+//     sqlite3_stmt* stmt;
+//     if (sqlite3_prepare_v2(db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+//         sqlite3_close(db);
+//         return false;
+//     }
+
+//     sqlite3_bind_text(stmt, 1, user.c_str(), -1, SQLITE_STATIC);
+//     bool ok = false;
+
+//     if (sqlite3_step(stmt) == SQLITE_ROW) {
+//         int id = sqlite3_column_int(stmt, 0);
+//         const char* stored = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+//         if (verify_password(pass, stored)) {
+//             out_user_id = id;
+//             ok = true;
+//         }
+//     }
+
+//     sqlite3_finalize(stmt);
+//     sqlite3_close(db);
+//     return ok;
+// }
+
+bool validate_user(const std::string& user, const std::string& pass, int& out_user_id) {
+    sqlite3* db = nullptr;
+    sqlite3_stmt* stmt = nullptr;
+
+    // Abrir conexión
+    if (sqlite3_open(DB_PATH.c_str(), &db) != SQLITE_OK){
+        return false;
+    }
+    // Preparar consulta
+    std::string query = "SELECT id, password FROM users WHERE username = ?";
+    if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
         sqlite3_close(db);
         return false;
     }
 
-    sqlite3_bind_text(stmt, 1, user.c_str(), -1, SQLITE_STATIC);
-    bool ok = false;
+    // Bind del parámetro
+    if (sqlite3_bind_text(stmt, 1, user.c_str(), -1, SQLITE_STATIC) != SQLITE_OK) {
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        return false;
+    }
 
+    // Ejecutar consulta
+    bool ok = false;
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         int id = sqlite3_column_int(stmt, 0);
         const char* stored = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        if (verify_password(pass, stored)) {
+        if (stored && verify_password(pass, stored)) {
             out_user_id = id;
             ok = true;
         }
     }
 
+    // Limpiar
     sqlite3_finalize(stmt);
     sqlite3_close(db);
     return ok;
 }
+
 // --------------------- /login ---------------------
-void handle_login(int& client_sock, const std::string& body) {
+void handle_login(int& client_sock, const std::string& body, const bool& validated) {
+    if(validated) debug_log("ALREADY LOGGED IN...");
     std::smatch match;
     std::regex user_pass("\"user\"\\s*:\\s*\"(.*?)\".*?\"pass\"\\s*:\\s*\"(.*?)\"");
 
@@ -298,7 +330,7 @@ void handle_login(int& client_sock, const std::string& body) {
             std::string cookie_header =
                 "Set-Cookie: Authorization=" + token +
                 "; Path=/; Max-Age=3600; HttpOnly; SameSite=Strict";
-            if (!DEV_MODE) {
+            if (!config.dev_mode) {
                 cookie_header += "; Secure";
             }
             cookie_header += "\r\n";

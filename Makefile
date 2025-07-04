@@ -12,7 +12,7 @@ BUILD_DIR = build
 
 CXX = g++
 CXXFLAGS_DEBUG = -std=c++20 -g -Wall -Wextra -fvisibility=hidden -fno-inline
-CXXFLAGS_PROD  = -std=c++20 -O3 -Wall -Wextra -fvisibility=hidden -fno-inline
+CXXFLAGS_PROD  = -std=c++20 -O3 -Wall -Wextra
 LDFLAGS_DEBUG  = -lpthread -lsqlite3 -lcrypto
 LDFLAGS_PROD   = -lpthread -lsqlite3 -lcrypto -s 
 ARCHFLAGS      = -march=native -flto=2 -msse2

@@ -9,15 +9,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (newSection === currentSection) return;
 
-    const direction = Array.from(sections).indexOf(newSection) > Array.from(sections).indexOf(currentSection)
-      ? 'left' : 'right';
+    // const direction = Array.from(sections).indexOf(newSection) > Array.from(sections).indexOf(currentSection)
+    //   ? 'left' : 'right';
     currentSection.classList.remove('active');
-    currentSection.classList.add(`fade-out-${direction}`);
-    newSection.classList.add(`fade-in-${direction}`);
+    currentSection.classList.add(`fade-out`);
+    // newSection.classList.add(`fade-in-${direction}`);
 
     setTimeout(() => {
-      currentSection.classList.remove(`fade-out-${direction}`);
-      newSection.classList.remove(`fade-in-${direction}`);
+      currentSection.classList.remove(`fade-out`);
+      // newSection.classList.remove(`fade-in-${direction}`);
       newSection.classList.add('active');
     }, 300);
   }
@@ -30,15 +30,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  document.getElementById('loadData').addEventListener('click', async (e) => {
-    const endpoint = e.target.dataset.endpoint;
-    try {
-      const response = await fetch(endpoint);
-      const json = await response.json();
-    } catch (error) {
-      console.error('Error al obtener datos:', error);
-    }
-  });
+  // document.getElementById('loadData').addEventListener('click', async (e) => {
+  //   const endpoint = e.target.dataset.endpoint;
+  //   try {
+  //     const response = await fetch(endpoint);
+  //     const json = await response.json();
+  //   } catch (error) {
+  //     console.error('Error al obtener datos:', error);
+  //   }
+  // });
 
   const canvas = document.getElementById('chartCanvas');
   const ctx = canvas.getContext('2d');
@@ -185,6 +185,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderChart(chartType, chartData, chartLabels);
 
+
+  const output = document.getElementById('console-output');
+  let autoscroll = true;
+  let autoscrollTimeout;
+
+  // Detectar si el usuario ha hecho scroll manual
+  output.addEventListener('scroll', () => {
+    const nearBottom = output.scrollHeight - output.scrollTop <= output.clientHeight + 20;
+
+    if (!nearBottom) {
+      autoscroll = false;
+      // Reiniciar el temporizador cada vez que el usuario hace scroll
+      if (autoscrollTimeout) clearTimeout(autoscrollTimeout);
+
+      autoscrollTimeout = setTimeout(() => {
+        autoscroll = true;
+      }, 60000); // 60 segundos sin tocar el scroll -> reactivar autoscroll
+    } else {
+      autoscroll = true;
+      if (autoscrollTimeout) clearTimeout(autoscrollTimeout);
+    }
+  });
+
+  async function fetchConsole() {
+    const consoleTab = document.querySelector('button[data-tab="console-view"]');
+    
+    // Solo ejecutar si la pestaña está activa
+    if (!consoleTab || !consoleTab.classList.contains('active')) return;
+
+    try {
+      const res = await fetch('/api/console', { method: 'REPORT' });
+      if (res.status === 401) {
+        window.location.href = '/'; // Redirige al login o página principal
+      }
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const data = await res.text();
+      output.textContent = data;
+    } catch (err) {
+      output.textContent += `\n[Error] ${err.message}`;
+    }
+    if (autoscroll) {
+      output.scrollTop = output.scrollHeight; // Auto-scroll al final
+    }
+  }
+
+  // Actualiza cada 2 segundos solo si la pestaña "Consola" está activa
+  setInterval(fetchConsole, 2000);
+  fetchConsole();
+
   // Botón: Cambiar tipo de gráfico
   document.getElementById('toggleChartType').addEventListener('click', () => {
     chartType = chartType === 'bar' ? 'line' : 'bar';
@@ -199,8 +248,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('refreshChart').addEventListener('click', async (e) => {
     const endpoint = e.target.dataset.endpoint;
     try {
-      const response = await fetch(endpoint);
-      const json = await response.json();
+      const res = await fetch(endpoint);
+      if (res.status === 401) {
+        return window.location.href = '/'; // Redirige al login o página principal
+      }
+      const json = await res.json();
 
       // Se espera que json tenga: { values: [..], labels: [..] }
       chartData = json.values;
@@ -226,17 +278,26 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         switch (action) {
           case 'start-server':
-            await fetch('/api/start-server', { method: 'POST' });
+            const res = await fetch('/api/start-server', { method: 'POST' });
+            if (res.status === 401) {
+              window.location.href = '/'; // Redirige al login o página principal
+            }
             alert('Solicitud de inicio enviada.');
             break;
 
           case 'stop-server':
-            await fetch('/api/stop-server', { method: 'POST' });
+            res = await fetch('/api/stop-server', { method: 'POST' });
+            if (res.status === 401) {
+              window.location.href = '/'; // Redirige al login o página principal
+            }
             alert('Solicitud de detención enviada.');
             break;
 
           case 'restart-server':
-            await fetch('/api/restart-server', { method: 'POST' });
+            res = await fetch('/api/restart-server', { method: 'POST' });
+            if (res.status === 401) {
+              window.location.href = '/'; // Redirige al login o página principal
+            }
             alert('Solicitud de reinicio enviada.');
             break;
 
@@ -264,6 +325,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // const viewportInfo = document.getElementById('viewport-info');
+
+  // function updateViewportSize() {
+  //   const width = window.innerWidth;
+  //   const height = window.innerHeight;
+  //   viewportInfo.textContent = `Viewport: ${width} x ${height}`;
+  // }
+
+  // // Inicializar
+  // updateViewportSize();
+
+  // // Actualizar al cambiar tamaño
+  // window.addEventListener('resize', updateViewportSize);
 
 
   /* ===========================================================
@@ -315,7 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cmd = prompt('Escribe tu comando personalizado:');
     if (!cmd) return;
     try {
-      await fetch('/api/send-command', {
+      const res = await fetch('/api/send-command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: cmd })
@@ -334,15 +409,18 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', async () => {
       const endpoint = btn.dataset.endpoint;
       try {
-        // Si la acción requiere parámetro extra (por ejemplo, kickear), preguntar aquí
+        // Si la acción requiere parámetro extra (por ejemplo,nombre usuario a kickear), preguntar aquí
         if (endpoint.endsWith('/player/kick')) {
-          const nombre = prompt('Ingresa nombre de jugador a kickear:');
+          const nombre = prompt('Ingresa nombre de jugador:');
           if (!nombre) return;
-          await fetch(endpoint, {
+          const res = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ player: nombre })
           });
+          if (res.status === 401) {
+            window.location.href = '/'; // Redirige al login o página principal
+          }
           alert(`Kick de ${nombre} enviado.`);
         }
         else {
@@ -362,16 +440,207 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+
   // ===========================================================
-  //  CERRAR DIÁLOGOS con botón .close-dialog (ya existía pero verifícalo)
+  //  Status Server Instances
+  // ===========================================================
+  const container = document.getElementById("instancesContainer");
+  const infoContainer = document.querySelector('[data-bind="server-info"]');
+  const nameDisplay = document.querySelector('[data-instance-name]');
+  let instances = {};
+  let selectedId = null;
+
+  async function loadInstances(endpoint) {
+    try {
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      instances = {};
+      container.innerHTML = "";
+
+      data.forEach(item => {
+        instances[item.id] = item;
+
+        const card = document.createElement("div");
+        card.classList.add("instance-card");
+        card.dataset.id = item.id;
+        card.dataset.screenName = item.screen_name;
+        card.dataset.serverPath = item.server_path;
+        card.dataset.status = item.status;
+        card.dataset.ramUsed = item.ram_used;
+        card.dataset.playerCount = item.player_count;
+        card.dataset.backupPath = item.backup_path;
+
+        card.innerHTML = `
+          <p><strong>${item.screen_name}</strong></p>
+          <p>Estado: ${item.status}</p>
+          <p>Jugadores: ${item.player_count}</p>
+        `;
+
+        card.addEventListener("click", () => {
+          selectInstance(item.id);
+        });
+
+        container.appendChild(card);
+      });
+
+      if (data.length > 0) {
+        selectInstance(data[0].id);
+      }
+    } catch (err) {
+      console.error("Error cargando instancias:", err);
+    }
+  }
+
+  function selectInstance(id) {
+    if (selectedId === id) return; // No cambia
+
+    selectedId = id;
+
+    // Actualizar selección visual
+    container.querySelectorAll(".instance-card").forEach(card => {
+      card.classList.toggle("selected", card.dataset.id === id);
+    });
+
+    const data = instances[id];
+    if (!data) return;
+
+    // Actualizar info detallada
+    infoContainer.querySelectorAll("[data-key]").forEach(el => {
+      const key = el.dataset.key;
+      let val = data[toCamelCase(key)] ?? data[key] ?? "-";
+
+      if (key === "player_count") val = `${val} conectados`;
+      if (key === "backup_path") val = val || "No configurado";
+
+      el.textContent = val;
+    });
+
+    // Actualizar header
+    if (nameDisplay) {
+      nameDisplay.textContent = data.screen_name;
+    }
+  }
+
+  // Convierte snake_case o lowercase a camelCase para asegurar acceso a propiedades JS
+  function toCamelCase(str) {
+    return str.replace(/_([a-z])/g, g => g[1].toUpperCase());
+  }
+
+  // Botones de acción
+  document.querySelectorAll("button[data-action]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!selectedId) {
+        alert("Selecciona una instancia primero.");
+        return;
+      }
+      const action = btn.dataset.action;
+      let endpoint = btn.dataset.endpoint.replace("{id}", selectedId);
+
+      try {
+        const res = await fetch(endpoint, {
+          method: action === "refresh" ? "GET" : "POST",
+        });
+        if (!res.ok) throw new Error();
+
+        if (action === "refresh") {
+          await loadInstances(container.dataset.endpoint);
+        } else {
+          alert(`Acción '${action}' ejecutada correctamente`);
+        }
+      } catch (err) {
+        alert(`Error ejecutando '${action}'`);
+        console.error(err);
+      }
+    });
+  });
+
+  // Auto cargar
+  if (container.dataset.autoLoad === "true") {
+    loadInstances(container.dataset.endpoint);
+  }
+  // const selector = document.getElementById("instanceSelector");
+  // const infoContainer = document.querySelector('[data-bind="server-info"]');
+  // const nameDisplay = document.querySelector('[data-instance-name]');
+  // let instances = {};
+
+  // async function loadInstances(endpoint) {
+  //   try {
+  //     const res = await fetch(endpoint);
+  //     const data = await res.json();
+  //     const idField = selector.dataset.fieldId || "id";
+  //     const labelField = selector.dataset.fieldLabel || "screen_name";
+  //     selector.innerHTML = "";
+
+  //     data.forEach(item => {
+  //       instances[item[idField]] = item;
+
+  //       const option = document.createElement("option");
+  //       option.value = item[idField];
+  //       option.textContent = item[labelField];
+  //       selector.appendChild(option);
+  //     });
+
+  //     if (data.length > 0) updateInfo(data[0][idField]);
+  //   } catch (err) {
+  //     console.error("Error al cargar instancias:", err);
+  //   }
+  // }
+
+  // function updateInfo(id) {
+  //   const data = instances[id];
+  //   if (!data) return;
+
+  //   infoContainer.querySelectorAll("[data-key]").forEach(el => {
+  //     const key = el.dataset.key;
+  //     let val = data[key];
+  //     if (key === "player_count") val = `${val} conectados`;
+  //     if (key === "backup_path") val = val || "No configurado";
+  //     el.textContent = val;
+  //   });
+
+  //   selector.dataset.activeId = id;
+  //   if (nameDisplay) nameDisplay.textContent = data.screen_name;
+  // }
+
+  // selector.addEventListener("change", () => {
+  //   updateInfo(selector.value);
+  // });
+
+  // document.querySelectorAll("button[data-action]").forEach(btn => {
+  //   btn.addEventListener("click", async () => {
+  //     const id = selector.dataset.activeId;
+  //     const endpoint = btn.dataset.endpoint.replace("{id}", id);
+  //     const action = btn.dataset.action;
+
+  //     try {
+  //       const res = await fetch(endpoint, {
+  //         method: action === "refresh" ? "GET" : "POST"
+  //       });
+  //       if (!res.ok) throw new Error();
+
+  //       if (action === "refresh") {
+  //         await loadInstances(selector.dataset.endpoint);
+  //       } else {
+  //         alert(`Acción '${action}' ejecutada correctamente`);
+  //       }
+  //     } catch (err) {
+  //       alert(`Error ejecutando '${action}'`);
+  //       console.error(err);
+  //     }
+  //   });
+  // });
+
+  // if (selector.dataset.autoLoad === "true") {
+  //   loadInstances(selector.dataset.endpoint);
+  // }
+
+  // ===========================================================
+  //  CERRAR DIÁLOGOS
   // ===========================================================
   document.querySelectorAll('.close-dialog').forEach(btn => {
     btn.addEventListener('click', () => {
       btn.closest('dialog').close();
     });
   });
-
-
-
 
 });
