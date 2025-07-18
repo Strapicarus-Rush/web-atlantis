@@ -84,6 +84,27 @@ public:
         return true;
     }
 
+    static std::string read_tmux_pane_capture(const std::string& target_pane) {
+        if (target_pane.empty()) {
+            throw std::runtime_error("Target pane is empty");
+        }
+
+        std::string command = "tmux capture-pane -p -t \"" + target_pane + "\"";
+        std::array<char, 4096> buffer;
+        std::string result;
+
+        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.c_str(), "r"), pclose);
+        if (!pipe) {
+            throw std::runtime_error("Failed to run tmux capture-pane");
+        }
+
+        while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+            result += buffer.data();
+        }
+
+        return result;
+    }
+
 private:
     static std::string escape_quotes(const std::string& input) {
         std::string escaped;

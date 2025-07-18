@@ -132,7 +132,7 @@ inline std::string read_output_tmux(const std::string& session_name) {
     try {
         TmuxSocketClient client;
         // int fd = client.connect_to_tmux_socket();
-        return client.read_tmux_pane_capture(sanitize_string(session_name));
+        return TmuxManager::read_tmux_pane_capture(sanitize_string(session_name));
     } catch (const std::exception& e) {
         throw std::runtime_error(std::string("[ERROR] ") + e.what());
     }
