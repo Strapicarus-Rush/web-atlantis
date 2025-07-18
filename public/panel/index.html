@@ -15,71 +15,67 @@
 <body>
   <header>
     <nav>
-      <button data-tab="status" class="tab active">Status</button>
-      <button data-tab="main-menu" class="tab">Menú Principal</button>
+      <button data-tab="server-status" class="tab active">Status</button>
       <button data-tab="console-view" class="tab">Consola</button>
+      <button data-tab="main-menu" class="tab">Acciones</button>
       <button data-tab="Config" class="tab">Config</button>
       <button id="toggleTheme">🌓</button>
     </nav>
-    <p><strong>Instancia actual:</strong> <span data-instance-name>—</span></p>
+    <div class="instance-label">
+      <strong>Instancia actual:</strong>
+      <div class="instance-name" data-instance-name>—</div>
+    </div>
   </header>
 
   <main>
-    <!-- Status Panel -->
-    <!-- <section data-content="server-status" class="content active">
-      <div class="menu-buttons" style="text-align: left;">
-        <label for="instanceSelector"><strong>Selecciona una instancia:</strong></label>
-        <select id="instanceSelector"
-                data-endpoint="/api/instances"
-                data-field-id="id"
-                data-field-label="screen_name"
-                data-auto-load="true">
+    <div id="alert-container"></div>
+
+    <section data-content="server-status" data-update="on-activate" data-function="fetchStatus" data-endpoint="/api/status" data-method="REPORT" class="content active">
+
+      <div class="menu-buttons">
+        <select class="selector" id="instanceSelector" data-function="fetchInstanceData" data-method="REPORT" data-endpoint="/api/instance/status">
         </select>
       </div>
-      <div class="menu-buttons" style="text-align: left;" data-bind="server-info">
-        <div style="border: 1px solid var(--clr-accent1); padding: 1rem;">
-          <p><strong>Servidor:</strong> <span data-key="screen_name">-</span></p>
-          <p><strong>Ruta:</strong> <span data-key="server_path">-</span></p>
-          <p><strong>Estado:</strong> <span data-key="status">-</span></p>
-          <p><strong>RAM Usada:</strong> <span data-key="ram_used">-</span></p>
-          <p><strong>Jugadores:</strong> <span data-key="player_count">-</span></p>
-          <p><strong>Backups:</strong> <span data-key="backup_path">-</span></p>
+
+      <div id="generalStatus" class="info-block">
+        <p><strong>Instancias Disponibles:</strong> <span data-key="instance_count">-</span></p>
+        <p><strong>Instancias Ejecutándose:</strong> <span data-key="instances_actives">-</span></p>
+        <p><strong>RAM Usada:</strong> <span data-key="general_ram_used">-</span></p>
+        <p><strong>Total Jugadores Activos:</strong> <span data-key="general_player_count">-</span></p>
+        <div class="menu-buttons">
+          <button data-gen="sta" data-function="fetchStatus" data-method="REPORT" data-endpoint="/api/status">🔄 Actualizar estado</button>
         </div>
       </div>
-      <div class="menu-buttons">
-        <button data-action="refresh" data-endpoint="/api/instances">Actualizar estado</button>
-        <button data-action="restart" data-endpoint="/api/instances/{id}/restart">Reiniciar</button>
-        <button data-action="backup" data-endpoint="/api/instances/{id}/backup">Crear backup</button>
-      </div>
-    </section> -->
 
-    <section data-content="status" class="content active" data-endpoint="/api/instances">
-      <div class="instance-cards"></div>
+      <div id="instanceStatus" class="info-block hidden">
+          <p><strong>Instancia:</strong> <span data-key="name">-</span></p>
+          <p><strong>Estado:</strong> <span class="status-dot" data-key="instance_status_dot"></span> <span data-key="status">-</span></p>
+          <p><strong>Complete:</strong> <span data-key="complete">-</span></p>
+          <p><strong>JAR:</strong> <span data-key="has_jar">-</span></p>
+          <p><strong>SH:</strong> <span data-key="has_run">-</span></p>
+          <p><strong>CPU %: </strong> <span data-key="cpu">-</span></p>
+          <p><strong>RAM Usada:</strong> <span data-key="ram_used">-</span></p>
+          <p><strong>Jugadores:</strong> <span data-key="player_count">-</span></p>
+          <p><strong>Backups:</strong> <span data-key="backup">-</span></p>
+        <div class="menu-buttons">
+          <button data-action="refresh" data-function="fetchInstanceData" data-method="REPORT" data-endpoint="/api/instance/status">Actualizar estado</button>
+          <button data-function="fetchInstanceData" data-method="POST" data-endpoint="/api/instance/backup">Crear backup</button>
+          <button data-action="run" data-function="fetchInstanceData" data-method="POST" data-endpoint="/api/instance/run">Iniciar instancia</button>
+          <button data-action="reboot" data-function="fetchInstanceData" data-method="POST" data-endpoint="/api/instance/reboot">Reiniciar instancia</button>
+          <button data-action="stop" data-function="fetchInstanceData" data-method="POST" data-endpoint="/api/instance/stop">Detener Servidor</button>
+        </div>
+      </div>
     </section>
 
-<!--     <section data-content="status" class="content active" data-endpoint="/api/instances">
-      <div id="instancesContainer" aria-label="Lista de instancias" role="list">
-
-      </div>
-      <div class="menu-buttons">
-        <button id="refreshInstances">Actualizar instancias</button>
-        <button id="someAction" disabled>Ejecutar acción en instancia</button>
-      </div>
-    </section> -->
-
-    <!-- Menú Principal -->
     <section data-content="main-menu" class="content">
       <h2>Menú Principal</h2>
       <div class="menu-buttons">
-        <button data-action="start-server">1. Iniciar Servidor</button>
-        <button data-action="stop-server">2. Detener Servidor</button>
-        <button data-action="restart-server">3. Reiniciar Servidor</button>
-        <button id="openQuickCommands">4. Comandos Rápidos</button>
-        <button id="customCommandBtn">5. Comando Personalizado</button>
-        <button id="openPlayerMgmt">6. Gestión de Jugadores</button>
-        <button id="openPluginMgmt">7. Gestión de Plugins/Mods</button>
-        <button id="openWorldMgmt">8. Gestión de Mundos</button>
-        <button id="openBackupMgmt">9. Gestión de Backups</button>
+        <button id="openQuickCommands">Comandos Rápidos</button>
+        <button id="customCommandBtn">Comando Personalizado</button>
+        <button id="openPlayerMgmt">Gestión de Jugadores</button>
+        <button id="openPluginMgmt">Gestión de Plugins/Mods</button>
+        <button id="openWorldMgmt">Gestión de Mundos</button>
+        <button id="openBackupMgmt">Gestión de Backups</button>
         <button data-action="edit-config">10. Editar Configuración</button>
         <button data-action="performance-monitor">11. Monitor de Rendimiento</button>
         <button data-action="view-logs">12. Ver Logs</button>
@@ -87,16 +83,14 @@
       </div>
     </section>
 
-    <!-- Comandos Rápidos -->
-    <section data-content="console-view" class="content">
+    <section data-content="console-view" class="content" data-update="continuous" data-function="fetchConsole" data-endpoint="/api/instance/console" data-method="REPORT">
       <pre id="console-output"></pre>
       <!-- <button id="loadData" data-endpoint="/api/data">Cargar Datos</button> -->
     </section>
 
-    <!-- Configuración -->
     <section data-content="Config" class="content">
       <h2>Configuraciones</h2>
-      <p>Aquí puedes ajustar las opciones de tu servidor y el panel.</p>
+      <p>Aquí ajustar las opciones de tu servidor y usuarios para cambio de password.</p>
     </section>
   </main>
 
@@ -105,7 +99,7 @@
   </footer>
 
   <!-- =======================================================
-       DIÁLOGOS / SUBMENÚS (cada opción ejecuta POST)
+       DIÁLOGOS / SUBMENÚS
        ======================================================= -->
 
 <!-- 1) Comandos Rápidos: categorías -->
@@ -264,57 +258,6 @@
   <button class="close-dialog">Cerrar</button>
 </dialog>
 
-
   <script src="js/panel.js" defer></script>
 </body>
 </html>
-
-
-
-<!-- <!DOCTYPE html>
-<html lang="es" data-theme="ligth">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Prototipo UI con Canvas Dinámico</title>
-  <link rel="stylesheet" href="css/panel.css" />
-  <script src="js/theme.js" defer></script>
-</head>
-<body>
-  <header>
-    <nav>
-      <button data-tab="status" class="tab active">Status</button>
-      <button data-tab="comandos" class="tab">Comandos</button>
-      <button data-tab="Config" class="tab">Config</button>
-      
-      <button id="toggleTheme">🌓</button>
-    </nav>
-  </header>
-
-  <main>
-
-    <section data-content="status" class="content active">
-      <canvas id="chartCanvas" width="600" height="300" data-type="bar"></canvas>
-      <div class="chart-controls">
-        <button id="refreshChart" data-endpoint="/api/chart-data">Actualizar gráfico</button>
-        <button id="toggleChartType">Cambiar a Línea</button>
-      </div>
-    </section>
-
-    <section data-content="comandos" class="content">
-      <p>Vista de envio de conmandos...</p>
-      <button id="loadData" data-endpoint="/api/data">Cargar Datos</button>
-    </section>
-
-    <section data-content="Config" class="content">
-      <p>Configuraciones..</p>
-    </section>
-
-  </main>
-
-  <footer>
-    <p></p>
-  </footer>
-  <script src="js/panel.js" defer></script>
-</body>
-</html> -->

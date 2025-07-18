@@ -6,6 +6,8 @@
 *.a
 *.so
 *.dll
+*.data
+
 
 # Carpetas de compilación
 build/
@@ -20,6 +22,8 @@ bin/
 *.tmp
 *.swp
 *~
+*.old
+perf.*
 
 # Archivos de backup
 *.bak

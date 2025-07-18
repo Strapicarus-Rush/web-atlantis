@@ -42,7 +42,7 @@ public:
 };
 
 class ThreadPool {
-    using Task = FixedFunction<64>;
+    using Task = FixedFunction<128>;
 
     std::vector<std::thread> workers;
     std::queue<Task> tasks;
@@ -69,7 +69,7 @@ public:
                         if (!condition_task.wait_for(lock, std::chrono::seconds(30), [this] {
                             return stop || !tasks.empty();
                         })) {
-                            std::cerr << "[ThreadPool] Worker " << i << " timeout waiting for task\n";
+                            // std::cerr << "[ThreadPool] Worker " << i << " timeout waiting for task\n";
                             continue; // seguir esperando
                         }
 

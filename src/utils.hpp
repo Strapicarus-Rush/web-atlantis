@@ -14,6 +14,8 @@
 #include <sqlite3.h>
 #include <unistd.h>
 #include <pwd.h>
+#include <vector>
+
 // #include "debug_log.hpp"
 // #include "config.hpp"
 
@@ -21,66 +23,34 @@ static constexpr size_t MAX_INSTANCES = 4;
 
 struct alignas(16) GlobalConfig {
 
+#ifdef DEV
     uint8_t dev_mode    = true;
+#else
+    uint8_t dev_mode    = false;
+#endif
     uint8_t debug_mode  = true;
     uint8_t log_mode    = false;
-    uint8_t padding     = 0; // para mantener alineación en memoria (experimental)
+    uint8_t padding     = 0;            // para mantener alineación en memoria (experimental)
     int     port        = 8080;
     int     max_threads = 2;
-    int     max_req_buf_size = 8192;  // 8kb para el buffer de lectura, si el tamaño de la petición es mayor se trunca.
-
+    int     max_req_buf_size = 8192;    // 8kb para el buffer de lectura, si el tamaño de la petición es mayor se trunca.
+    int     login_expiration = 3600;    // Duración en segundos de la cookie de autorización 
     // ========================
     // Para la ruta de las instalaciones de los servidores minecraft.
     // Sin ruta absoluta se asume "/home/[currentUser]/[servers_paths]". la ruta absoluta requiere length<=31 caracteres.
+    // Las otras rutas (config, db, log) se asumen en $HOME/.pccssystems/web-atlantis/*, o ruta del proyecto en desarrollo.
     // ========================
     char servers_path[32] = "juegos";
-    char config_file[16] = "server.config";
+    char config_file[16] = "atlantis.config";
+    char db_name[16] = "atlantis.db";
+    char log_file[16] = "atlantis.log";
 };
 
 inline GlobalConfig config;
 
-struct alignas(32) ServerInstance {
-    uint64_t active_at = 0;     // 8 bytes
-    char name[16] = {};         // 16 bytes
-    uint8_t has_jar = false;    // 1 byte
-    uint8_t has_run = false;    // 1 byte
-    uint8_t active = false;     // 1 byte
-    uint8_t users = 24;         // 1 byte
-    uint8_t _padding[4] = {};   // padding explícito para llegar a 32B (para alineación en memoria)
-
-    bool is_valid() const { return has_jar || has_run; }
-    bool is_complete() const { return has_jar && has_run; }
-};
-
-inline ServerInstance serversPool[MAX_INSTANCES] = {};
-
-// size_t count = list_minecraft_servers(config, serversPool, MAX_INSTANCES);
-
-inline ServerInstance create_instance(const std::string& name, uint64_t active_at,
-                               bool has_jar, bool has_run, bool active, uint8_t users) {
-    ServerInstance inst{};
-    inst.active_at = active_at;
-
-    constexpr size_t max_len = sizeof(inst.name);
-    int written = std::snprintf(inst.name, max_len, "%s", name.c_str());
-
-    if (written < 0) {
-        std::cerr << "Error: Fallo al copiar nombre al buffer.\n";
-        inst.name[0] = '\0'; // fallback seguro
-    } else if (static_cast<size_t>(written) >= max_len) {
-        std::cerr << "Advertencia: Nombre truncado a " << max_len - 1 << " caracteres.\n";
-    }
-
-    inst.has_jar = has_jar;
-    inst.has_run = has_run;
-    inst.active = active;
-    inst.users = users;
-    return inst;
-}
-
 inline std::ofstream log_file;
 
-inline void debug_log_internal(const std::string& msg, const char* file, int line, const char* func) {
+static void debug_log_internal(const std::string& msg, const char* file, int line, const char* func) {
     const std::string full = "[DEBUG] " + std::string(file) + ":" + std::to_string(line) + " (" + func + ") - " + msg;
 
     if (config.debug_mode)
@@ -94,10 +64,16 @@ inline void debug_log_internal(const std::string& msg, const char* file, int lin
 
 #define debug_log(msg) debug_log_internal((msg), __FILE__, __LINE__, __func__)
 
-inline std::string trim(const std::string& s) {
-    auto start = s.find_first_not_of(" \r\n\t");
-    auto end = s.find_last_not_of(" \r\n\t");
-    return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
+inline void trim(std::string& s) {
+    const char* ws = " \t\r\n";
+    const auto start = s.find_first_not_of(ws);
+    if (start == std::string::npos) {
+        s.clear();
+        return;
+    }
+    const auto end = s.find_last_not_of(ws);
+    s.erase(end + 1);
+    s.erase(0, start);
 }
 
 inline std::string to_lower(std::string s) {
@@ -106,16 +82,38 @@ inline std::string to_lower(std::string s) {
     return s;
 }
 
-inline std::string get_mime_type(const std::string& raw_path) {
-    const std::string path = to_lower(trim(raw_path));
+inline std::string replace_spaces_with_underscore(std::string str) {
+    std::replace(str.begin(), str.end(), ' ', '_');
+    return str;
+}
+
+inline std::string sanitize_string(std::string str) {
+    const std::string forbidden_chars = " -,'\".:;/\\+*&%·#$|@=?!`ç´{}[]";
+
+    std::replace_if(str.begin(), str.end(),
+        [&](char c) {
+            return forbidden_chars.find(c) != std::string::npos;
+        },
+        '_'
+    );
+    return str;
+}
+
+inline bool has_dot(const std::string& str) {
+    return str.find('.') != std::string::npos;
+}
+
+inline std::string get_mime_type(const std::string& path) {
+    if(!has_dot(path)) return "Error";
+    // const std::string path = to_lower(trim_copy(raw_path));
     if (path.ends_with(".html") || path.ends_with(".htm")) return "text/html";
     if (path.ends_with(".css")) return "text/css";
-    if (path.ends_with(".txt")) return "text/plain; charset=utf-8";
+    // if (path.ends_with(".txt")) return "text/plain; charset=utf-8";
     if (path.ends_with(".js")) return "application/javascript";
     if (path.ends_with(".json")) return "application/json";
     if (path.ends_with(".png")) return "image/png";
-    if (path.ends_with(".jpg") || path.ends_with(".jpeg")) return "image/jpeg";
-    if (path.ends_with(".gif")) return "image/gif";
+    // if (path.ends_with(".jpg") || path.ends_with(".jpeg")) return "image/jpeg";
+    // if (path.ends_with(".gif")) return "image/gif";
     // if (path.ends_with(".svg")) return "image/svg+xml";
     if (path.ends_with(".ico")) return "image/x-icon";
     // if (path.ends_with(".woff")) return "font/woff";
@@ -141,6 +139,22 @@ inline std::vector<std::string> split(const std::string& str, char delim) {
     return parts;
 }
 
+inline std::string normalize_servers_path(const GlobalConfig& conf) {
+    // Si la ruta ya es absoluta, no hay nada que hacer
+    if (conf.servers_path[0] == '/') {
+        return std::string(conf.servers_path); 
+    }
+
+    const char* home = getenv("HOME");
+    if (!home) {
+        home = getpwuid(getuid())->pw_dir;
+    }
+
+    std::string full_path = std::string(home) + "/" + std::string(conf.servers_path);
+
+    return full_path;
+}
+
 inline std::string get_base_path(const GlobalConfig& conf) {
     const char* home = getenv("HOME");
     if (!home) {
@@ -159,12 +173,15 @@ inline std::string get_base_path(const GlobalConfig& conf) {
     }else{
       app_path = std::string(home) + "/.pccssystems/web-atlantis";
     }
-    debug_log(app_path);
     return app_path;
 }
 
 inline std::string get_db_path() {
-    return get_base_path(config) + "/atlantis.db";
+    return get_base_path(config) + "/data/";
+}
+
+inline std::string get_db_file() {
+    return get_base_path(config) + "/data/" + config.db_name;
 }
 
 inline std::string get_public_path() {
@@ -172,112 +189,88 @@ inline std::string get_public_path() {
 }
 
 inline std::string get_log_path() {
-    return get_base_path(config) + "/server.log";
+    return get_base_path(config) + "/log/";
 }
 
+inline std::string get_log_file() {
+    return get_base_path(config) + "/log/" + config.log_file;
+}
 
-inline void set_path(GlobalConfig& conf, const char* path) {
-    constexpr std::size_t max_len = sizeof(conf.servers_path);
+inline std::string get_config_path() {
+    return get_base_path(config) + "/config/" ;
+}
 
-    int written = std::snprintf(conf.servers_path, max_len, "%s", path);
+inline std::string get_config_file() {
+    return get_base_path(config) + "/config/" + config.config_file ;
+}
+
+inline std::string get_servers_path() {
+    return normalize_servers_path(config);
+}
+
+inline void set_path(char* dest, std::size_t max_len, const char* path, const char* label) {
+    int written = std::snprintf(dest, max_len, "%s", path);
 
     if (written < 0) {
-        std::cerr << "Error: Fallo al copiar SERVERS_PATH al buffer. Se deja vacio\n";
-        conf.servers_path[0] = '\0'; // fallback seguro
+        std::cerr << "Error: Fallo al copiar " << label << " al buffer. Se deja vacío.\n";
+        dest[0] = '\0'; // fallback seguro
     } else if (static_cast<std::size_t>(written) >= max_len) {
-        std::cerr << "Advertencia: SERVERS_PATH fue truncado a "
+        std::cerr << "Advertencia: " << label << " fue truncado a "
                   << max_len - 1 << " caracteres.\n";
     }
 }
 
-// // ========================
-// // Para la ruta de las instalaciones de los servidores minecraft
-// // ========================
-// inline std::string normalize_server_path(const GlobalConfig& conf) {
-//     // Si la ruta ya es absoluta, no hay nada que hacer
-//     if (conf.servers_path[0] == '/') {
-//         return conf.servers_path; 
-//     }
-
-//     std::string full_path = get_base_path() + "/" + conf.servers_path;
-
-//     return full_path;
-// }
-
-
-
-//===================================================================
-//  TODO: Revisar inicializaciones de arichivos base, utilizar directorio public y no strings en el binario.
-//===================================================================
-
-// void ensure_public_files(const std::string& base_path) {
-//     const std::string public_dir = base_path + "/public";
-//     // const std::string panel_dir = public_dir + "/panel";
-//     // const std::string error_dir = public_dir + "/error";
-//     // const std::string css_dir = public_dir + "/css";
-//     // const std::string assets = public_dir + "/assets";
-//     // const std::string js = public_dir + "/js";
-
-//     // std::filesystem::create_directories(public_dir);
-//     // std::filesystem::create_directories(panel_dir);
-//     // std::filesystem::create_directories(error_dir);
-//     // std::filesystem::create_directories(css_dir);
-
-//     // const std::string index_file = public_dir + "/index.html";
-//     // const std::string panel_file = panel_dir + "/index.html";
-//     // const std::string style_file = error_dir + "/style.css";
-
-//     // if (!std::filesystem::exists(index_file)) {
-//     //     std::ofstream(index_file) << index_html;
-//     // }
-
-//     // if (!std::filesystem::exists(panel_file)) {
-//     //     std::ofstream(panel_file) << panel_html;
-//     // }
-
-//     // if (!std::filesystem::exists(style_file)) {
-//     //     std::ofstream(style_file) << style_css;
-//     // }
-// }
-
-//===================================================================
-//  TODO: mover a config.hpp?
-//===================================================================
 inline void load_or_create_config(GlobalConfig& conf) {
-    const std::string base_path = get_base_path(conf);
-    const std::string config_path = base_path + "/" + conf.config_file;
 
-    std::filesystem::create_directories(base_path);
-    // ensure_public_files(base_path);
+    std::filesystem::create_directories(get_base_path(conf));
+    std::filesystem::create_directories(get_db_path());
+    std::filesystem::create_directories(get_config_path());
+    std::filesystem::create_directories(get_log_path());
 
-    std::ifstream infile(config_path);
+    std::ifstream infile(get_config_file());
 
     //===================================================================
     //  Si el archivo de configuración [config_path] no existe se crea aquí con valores de GlobalConfig.
     //===================================================================
     if (!infile.is_open()) {
-        std::ofstream outfile(config_path);
+        std::ofstream outfile(get_config_file());
         outfile << "# Default DEV_MODE=1" << "\n";
-        outfile << "DEV_MODE=" << static_cast<int>(conf.dev_mode) << "\n";
+        outfile << "DEV_MODE=" << static_cast<int>(conf.dev_mode) << "\n\n";
+
         outfile << "# Default DEBUG_MODE=1" << "\n";
-        outfile << "DEBUG_MODE=" << static_cast<int>(conf.debug_mode) << "\n";
+        outfile << "DEBUG_MODE=" << static_cast<int>(conf.debug_mode) << "\n\n";
+
         outfile << "# Default LOG_MODE=0" << "\n";
-        outfile << "LOG_MODE=" << static_cast<int>(conf.log_mode) << "\n";
-        outfile << "# Default PORT=8080" << "\n";
-        outfile << "PORT=" << conf.port << "\n";
+        outfile << "LOG_MODE=" << static_cast<int>(conf.log_mode) << "\n\n";
+
         outfile << "# Default MAX_THREADS=2 (minimo 2, máximo 8)" << "\n";
-        outfile << "MAX_THREADS=" << conf.max_threads << "\n";
-        outfile << "# Default SERVERS_PATH=juegos (Sin ruta absoluta se asume \"/home/user/[servers_paths]\". la ruta absoluta length<=31 caracteres.)" << "\n";
-        outfile << "SERVERS_PATH=" << conf.servers_path << "\n";
+        outfile << "MAX_THREADS=" << conf.max_threads << "\n\n";
+
+        outfile << "# Default PORT=8080" << "\n";
+        outfile << "PORT=" << conf.port << "\n\n";
+
         outfile << "# Default MAX_REQ_BUF_SIZE=8192 (8kb para el buffer de lectura de peticiones TCP)" << "\n";
-        outfile << "MAX_REQ_BUF_SIZE=" << conf.max_req_buf_size << "\n"; 
+        outfile << "MAX_REQ_BUF_SIZE=" << conf.max_req_buf_size << "\n\n"; 
+
+        outfile << "# Default SERVERS_PATH=juegos (Sin ruta absoluta se asume \"$HOME/[servers_paths]\". la ruta absoluta length<=31 caracteres.)" << "\n";
+        outfile << "SERVERS_PATH=" << conf.servers_path << "\n\n";
+
+        outfile << "Default LOGIN_EXPIRATION=3600 (60 minutos) Min: 1800 (30 min), Max: 172800(48hrs)" << "\n";
+        outfile << "LOGIN_EXPIRATION=" << conf.login_expiration << "\n\n";
+
+        outfile << "#Default DB_NAME=atlantis.db" << "\n";
+        outfile << "DB_NAME=" << conf.db_name << "\n\n";
+
+        outfile << "Default LOG_FILE=atlantis.log" << "\n";
+        outfile << "LOG_FILE=" << conf.log_file << "\n\n";
+
         outfile.close();
         debug_log("Archivo de configuración por defecto creado...");
         return;
     }
 
     //===================================================================
-    //  El archivo de configuración [config_path] se lee aquí.
+    //  El archivo de configuración [config_path] se lee.
     //===================================================================
     std::unordered_map<std::string, std::string> config;
     std::string line;
@@ -296,9 +289,11 @@ inline void load_or_create_config(GlobalConfig& conf) {
     if (config.count("DEV_MODE")) {
         conf.dev_mode = static_cast<uint8_t>(std::stoi(config["DEV_MODE"]) != 0);
     }
+
     if (config.count("DEBUG_MODE")) {
         conf.debug_mode = static_cast<uint8_t>(std::stoi(config["DEBUG_MODE"]) != 0);
     }
+
     if (config.count("LOG_MODE")) {
         conf.log_mode = static_cast<uint8_t>(std::stoi(config["LOG_MODE"]) != 0);
     }
@@ -314,114 +309,44 @@ inline void load_or_create_config(GlobalConfig& conf) {
 
     if (config.count("MAX_THREADS")) {
         int threads = std::stoi(config["MAX_THREADS"]);
-        if (threads > 0 && threads <= 8) {
+        if (threads > 1 && threads <= 8) {
             conf.max_threads = threads;
         } else {
             debug_log("MAX_THREADS inválido. Usando: " + std::to_string(conf.max_threads));
         }
     }
 
+    if (config.count("LOGIN_EXPIRATION")) {
+        int login_expiration = std::stoi(config["LOGIN_EXPIRATION"]);
+        if (login_expiration >= 1800 && login_expiration <= 172800) {
+            conf.login_expiration = login_expiration;
+        } else {
+            debug_log("login_expiration inválido. Usando: " + std::to_string(conf.login_expiration));
+        }
+    }
+
     if (config.count("SERVERS_PATH")) {
-        set_path(conf, config["SERVERS_PATH"].c_str());
+        set_path(conf.servers_path, sizeof(conf.servers_path), config["SERVERS_PATH"].c_str(), "SERVERS_PATH");
     }
-    debug_log("Archivo/configuración cargado...");
+
+    if (config.count("DB_PATH")) {
+        set_path(conf.db_name, sizeof(conf.db_name), config["DB_NAME"].c_str(), "DB_NAME");
+    }
+
+    if (config.count("LOG_PATH")) {
+        set_path(conf.log_file, sizeof(conf.log_file), config["LOG_PATH"].c_str(), "LOG_PATH");
+    }
+
+    if (config.count("MAX_REQ_BUF_SIZE")) {
+        int max_req_buf_size = std::stoi(config["MAX_REQ_BUF_SIZE"]);
+        if (max_req_buf_size >= 1800 && max_req_buf_size <= 172800) {
+            conf.max_req_buf_size = max_req_buf_size;
+        } else {
+            debug_log("max_req_buf_size inválido. Usando: " + std::to_string(conf.max_req_buf_size));
+        }
+    }
+
+    debug_log("Archivo de configuración cargado...");
 }
-
-// inline std::string get_public_path() {
-//     return get_base_path(config) + "/public";
-// }
-
-// inline std::string get_log_path() {
-//     return get_base_path(config) + "/server.log";
-// }
-
-
-
-inline size_t list_minecraft_servers(const GlobalConfig& conf, size_t max_count) {
-    size_t count = 0;
-
-    std::filesystem::path root = conf.servers_path[0] == '/' 
-        ? std::filesystem::path(conf.servers_path)
-        : std::filesystem::path(get_base_path(conf)) / conf.servers_path;
-
-    if (!std::filesystem::exists(root) || !std::filesystem::is_directory(root)) {
-        debug_log("Directorio raíz inválido: " + root.string());
-        return 0;
-    }
-
-    for (const auto& entry : std::filesystem::directory_iterator(root)) {
-        if (count >= max_count) {
-            break;
-        }
-
-        if (!entry.is_directory()) {
-            continue;
-        }
-
-        const std::string name = entry.path().filename().string();
-        if (name.size() >= sizeof(serversPool[count].name)) {
-            debug_log("Nombre demasiado largo: " + name);
-            continue;
-        }
-
-        // SAFE INIT: no memset, just value-initialize the struct
-        serversPool[count] = ServerInstance{};
-        ServerInstance& inst = serversPool[count];
-
-        std::memcpy(inst.name, name.c_str(), name.size());
-        inst.has_jar = std::filesystem::exists(entry.path() / "server.jar");
-        inst.has_run = std::filesystem::exists(entry.path() / "run.sh");
-        inst.active_at = std::time(nullptr);
-
-        if (inst.is_valid()) {
-            ++count;
-        }
-    }
-
-    return count;
-}
-// inline size_t list_minecraft_servers(const GlobalConfig& conf, size_t max_count) {
-
-//     size_t count = 0;
-
-//     std::filesystem::path root = conf.servers_path[0] == '/' ? std::filesystem::path(conf.servers_path)
-//                                                 : std::filesystem::path(get_base_path(conf)) / conf.servers_path;
-
-//     if (!std::filesystem::exists(root) || !std::filesystem::is_directory(root)) {
-//         debug_log("Directorio raíz inválido: " + root.string());
-//         return 0;
-//     }
-
-//     for (const auto& entry : std::filesystem::directory_iterator(root)) {
-//         if (count >= max_count) {
-//             break;
-//         }
-
-//         if (!entry.is_directory()) {
-//             continue;
-//         }
-
-//         const std::string name = entry.path().filename().string();
-//         if (name.size() >= sizeof(out[count].name)) {
-//             debug_log("Nombre demasiado largo: " + name);
-//             continue;
-//         }
-
-//         ServerInstance& inst = out[count];
-//         std::memset(&inst, 0, sizeof(ServerInstance));
-
-//         std::memcpy(inst.name, name.c_str(), name.size());
-//         inst.has_jar = std::filesystem::exists(entry.path() / "server.jar");
-//         inst.has_run = std::filesystem::exists(entry.path() / "run.sh");
-//         inst.active_at = std::time(nullptr);
-
-//         if (inst.is_valid()) {
-//             ++count;
-//         }
-//     }
-
-//     return count;
-// }
-
 
 #endif // UTILS_HPP

@@ -1,15 +1,15 @@
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <cstring>
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <thread>
-#include <functional>
-#include <cstdlib>
+#include <netinet/in.h>      // struct sockaddr_in, INADDR_ANY, htons(), ntohs(), IPPROTO_UDP, etc.
+#include <netinet/tcp.h>     // TCP_NODELAY, struct tcphdr, opciones específicas del protocolo TCP
+#include <sys/socket.h>      // socket(), bind(), listen(), accept(), connect(), shutdown(), SHUT_RDWR, struct sockaddr
+#include <arpa/inet.h>       // inet_ntoa(), inet_pton(), inet_ntop(), ntohl(), htonl(), etc. (conversiones de IP y puertos)
+#include <unistd.h>          // close(), read(), write(), access(), STDIN_FILENO, etc. (llamadas al sistema POSIX)
+#include <cstring>           // std::memcpy(), std::memset(), std::strcmp(), std::strlen(), etc.
+#include <iostream>          // std::cout, std::cerr, std::endl
+// #include <fstream>           // std::ifstream, std::ofstream, std::fstream (manipulación de archivos)
+#include <string>            // std::string, std::to_string(), std::getline(), etc.
+#include <thread>            // std::thread, std::this_thread::sleep_for(), concurrencia básica
+// #include <functional>        // std::function, std::bind, std::ref (para funciones y callbacks)
+#include <cstdlib>           // std::atoi(), std::exit(), std::rand(), std::getenv(), std::system(), etc.
 #include "thread_pool.hpp"
 #include "db_manager.hpp"
 #include "utils.hpp"
@@ -18,23 +18,19 @@
 // Configuración global
 // ========================
 static bool SHOW_HELP = false;
-// static std::string db_path = get_db_path();
-DBManager db_manger(get_db_path());
+constexpr int MAX_SELECT_FAILURES = 100;
+constexpr int ACCEPT_TIMEOUT_SEC = 5;
 
 // ========================
 // Declaraciones externas
 // ========================
-
-// extern bool initialize_database();
-extern void handle_client(int& client_sock);
+extern void handle_client(int client_sock);
 extern bool is_ip_blocked(const std::string& ip);
-extern void setup_routes();
 
 // ========================
 // Función de cierre seguro
 // ========================
 inline void fatal_error(const std::string& msg, const int& exit_code = 1) {
-    debug_log(msg);
     if (log_file.is_open()) {
         log_file << "FATAL: " << msg << std::endl;
         log_file.close();
@@ -49,7 +45,6 @@ inline void fatal_error(const std::string& msg, const int& exit_code = 1) {
 inline void checkNotRoot() {
     if (geteuid() == 0) {
         fatal_error("Por seguridad este programa no debe ejecutarse como usuario privilegiado root.\n", EXIT_FAILURE);
-        // std::exit(EXIT_FAILURE);
     }
 }
 
@@ -65,6 +60,11 @@ void print_help(const char* prog_name) {
         "  -port=[NUMERO]          Asigna el puerto de escucha (default: 8080).\n"
         "  -threads=[CANTIDAD]     Asigna el número máximo de hilos (default: 4).\n\n"
         "  -config=[PATH]          Asigna el nombre del archivo de configuración (default:server.config).\n\n"
+        "  -loginexp=[SEGUNDOS]    Tiempo de expiración de sesión (default: 3600, min: 1800, max: 172800).\n"
+        "  -dbname=[NOMBRE]        Nombre del archivo de base de datos (default: atlantis.db).\n"
+        "  -logfile=[NOMBRE]       Ruta del archivo de log (default: atlantis.log).\n"
+        "  -servers=[RUTA]         Ruta base para servidores (default: juegos).\n"
+        "  -maxreqbuf=[BYTES]      Tamaño máximo del buffer de lectura TCP (default: 8192).\n"
         "Ejemplos:\n"
         "  " << prog_name << "\n"
         "  " << prog_name << " -logfile -prod -port=8080 -threads=2\n\n"
@@ -90,9 +90,7 @@ static void parse_arguments(int argc, char* argv[], GlobalConfig& config) {
             config.dev_mode = false;
         } else if (std::strcmp(arg, "-nodebug") == 0) [[unlikely]] {
             config.debug_mode = false;
-        } 
-
-        else if (std::strncmp(arg, "-port=", 6) == 0) [[likely]] {
+        } else if (std::strncmp(arg, "-port=", 6) == 0) [[likely]] {
             int vport = std::atoi(arg + 6);
 
             if (vport >= 1024 && vport <= 65535) [[likely]] {
@@ -111,11 +109,33 @@ static void parse_arguments(int argc, char* argv[], GlobalConfig& config) {
                 std::cerr << "Error: snprintf failed.\n";
                 std::snprintf(config.config_file, sizeof(config.config_file), "%s", "server.config");
             } else if (static_cast<size_t>(written) >= sizeof(config.config_file)) [[likely]] {
-                std::cerr << "Warning: config_file truncated to " << sizeof(config.config_file) - 1 << " characters.\n";
+                debug_log("WARN: Archivo configuración truncado a  " + std::to_string(sizeof(config.config_file) - 1) + " characters.\n");
             }
-        }
+        } else if (std::strncmp(arg, "-loginexp=", 10) == 0) {
+            int value = std::atoi(arg + 10);
+            if (value >= 1800 && value <= 172800) {
+                config.login_expiration = value;
+            } else {
+                debug_log("LOGIN_EXPIRATION inválido. Usando: " + std::to_string(config.login_expiration));
+            }
 
-        else {
+        } else if (std::strncmp(arg, "-dbname=", 8) == 0) {
+            set_path(config.db_name, sizeof(config.db_name), arg + 8, "DB_NAME");
+
+        } else if (std::strncmp(arg, "-logfile=", 9) == 0) {
+            set_path(config.log_file, sizeof(config.log_file), arg + 9, "LOG_FILE");
+
+        } else if (std::strncmp(arg, "-servers=", 9) == 0) {
+            set_path(config.servers_path, sizeof(config.servers_path), arg + 9, "SERVERS_PATH");
+
+        } else if (std::strncmp(arg, "-maxreqbuf=", 11) == 0) {
+            int value = std::atoi(arg + 11);
+            if (value >= 1024 && value <= 65536) { // Rango razonable
+                config.max_req_buf_size = value;
+            } else {
+                debug_log("MAX_REQ_BUF_SIZE inválido. Usando: " + std::to_string(config.max_req_buf_size));
+            }
+        } else {
             std::cerr << "Advertencia: opción desconocida ignorada: " << arg << "\n";
             print_help(argv[0]);
         }
@@ -126,26 +146,31 @@ static void parse_arguments(int argc, char* argv[], GlobalConfig& config) {
     }
 }
 
-bool try_enqueue_client(int client_sock, ThreadPool& pool) {
+void try_enqueue_client(int client_sock, ThreadPool& pool) {
     try {
+        //////////////////////////////////////////////////
+        // TODO: por alguna razón desconocida, pasar ip al 
+        //       pool ocasiona una violación de segmento.
+        /////////////////////////////////////////////////
+
+        // pool.enqueue([client_sock,ip]() mutable {
         pool.enqueue([client_sock]() mutable {
             try {
                 handle_client(client_sock);
-            } catch (const std::exception& e) {
-                debug_log(std::string("Excepción al manejar cliente: ") + e.what());
+            } catch (const std::runtime_error& e) {
+                debug_log(e.what());
+                shutdown(client_sock, SHUT_RDWR);
+                close(client_sock);
             } catch (...) {
                 debug_log("Excepción desconocida al manejar cliente.");
+                shutdown(client_sock, SHUT_RDWR);
+                close(client_sock);
             }
-            debug_log("Cerrando conexión cliente");
-            shutdown(client_sock, SHUT_RDWR);
-            close(client_sock);
         });
-        return true;
     } catch (const std::runtime_error& e) {
-        debug_log("Rechazada conexión: Pool saturado");
+        debug_log(std::string("Rechazada conexión: Pool saturado...:") + e.what());
         shutdown(client_sock, SHUT_RDWR);
         close(client_sock);
-        return false;
     }
 }
 
@@ -155,39 +180,33 @@ bool try_enqueue_client(int client_sock, ThreadPool& pool) {
 int main(int argc, char* argv[]) {
 
     checkNotRoot();
+
     parse_arguments(argc, argv, config);
 
     try {
-        // ========================
-        // TODO: Revisar inicialización para limpiar.
-        // ========================
-        load_or_create_config(config);
-        setup_routes();
 
-        if (config.log_mode) [[unlikely]] {
-            log_file.open(get_log_path(), std::ios::app);
+        load_or_create_config(config);
+
+        DBManager db_manger(get_db_file());
+
+        if (config.log_mode) [[likely]] {
+            log_file.open(get_log_file(), std::ios::app);
             if (!log_file) [[unlikely]] {
-                debug_log("No se pudo abrir el archivo de log.");
                 fatal_error("No se pudo abrir el archivo de log.");
             }
         }
 
-        if (!db_manger.m_initialize_database()) [[unlikely]] {
-            debug_log("Error inicializando la base de datos.");
-            fatal_error("Error inicializando la base de datos.");
-        }
+        db_manger.m_initialize_database();
 
         // ========================
         // Crear socket servidor
         // ========================
         int server_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
         if (server_fd < 0) [[unlikely]] {
-            debug_log("Error crear socket");
             fatal_error("Error creando el socket.");
         }
         int opt = 1;
         if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) [[unlikely]] {
-            debug_log("Error setsockopt");
             close(server_fd);
             fatal_error("Error en setsockopt.");
         }
@@ -198,18 +217,19 @@ int main(int argc, char* argv[]) {
         address.sin_port = htons(config.port);
 
         if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) [[unlikely]] {
-            debug_log("Error Bind");
             close(server_fd);
             fatal_error("Error en bind.");
         }
 
         if (listen(server_fd, 128) < 0) [[unlikely]] {
-            debug_log("Error Listen");
             close(server_fd);
             fatal_error("Error en listen.");
         }
 
-        debug_log("Servidor escuchando en el puerto " + std::to_string(config.port));
+        // debug_log("\n\n MODO DEV: " + std::to_string(config.dev_mode));
+        debug_log("\n\n MODO: " + std::string(config.dev_mode ? "DEV" : "PROD"));
+        debug_log("\n\nServidor escuchando en el puerto " + std::to_string(config.port));
+
 
         // ========================
         // Crear ThreadPool
@@ -223,9 +243,7 @@ int main(int argc, char* argv[]) {
         
         // Loop principal
         int consecutive_select_failures = 0;
-        constexpr int MAX_SELECT_FAILURES = 10;
-        constexpr int ACCEPT_TIMEOUT_SEC = 5;
-        
+                
 
         while (true) {
             fd_set readfds;
@@ -240,6 +258,7 @@ int main(int argc, char* argv[]) {
 
             if (activity < 0) {
                 if (errno == EINTR) {
+                    debug_log("Error: " + std::string(strerror(errno)) + " | " + std::to_string(EINTR));
                     continue; // Señal, reiniciar loop
                 }
 
@@ -247,21 +266,18 @@ int main(int argc, char* argv[]) {
                 consecutive_select_failures++;
 
                 if (consecutive_select_failures >= MAX_SELECT_FAILURES) {
-                    debug_log("Demasiados fallos consecutivos de select(). Terminando servidor.");
+                    fatal_error("Demasiados fallos consecutivos de select(). Terminando servidor.");
                     break;
                 }
-
                 continue;
             }
-
-            // Resetear contador si no hubo fallo
-            consecutive_select_failures = 0;
+            
 
             if (activity == 0) {
-                // Timeout sin actividad. Puede usarse para hacer tareas periódicas o verificar flags.
+                // Timeout sin actividad. Puede usarse para hacer tareas periódicas.
                 continue;
             }
-
+            
             if (FD_ISSET(server_fd, &readfds)) {
                 sockaddr_in client_addr{};
                 socklen_t addrlen = sizeof(client_addr);
@@ -269,8 +285,16 @@ int main(int argc, char* argv[]) {
 
                 if (client_sock < 0) {
                     debug_log("Fallo al aceptar conexión: " + std::string(strerror(errno)));
+                    consecutive_select_failures++;
+                    if (consecutive_select_failures >= MAX_SELECT_FAILURES) {
+                        fatal_error("Demasiados fallos consecutivos de select(). Terminando servidor.");
+                        break;
+                    }
                     continue;
                 }
+
+                // Resetear contador si no hubo fallo
+                consecutive_select_failures = 0;
 
                 // Opciones de socket
                 int opt = 1;
@@ -282,83 +306,46 @@ int main(int argc, char* argv[]) {
                 // Obtener IP del cliente
                 char ip_str[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &client_addr.sin_addr, ip_str, sizeof(ip_str));
-                std::string client_ip = ip_str;
+                std::string client_ip = ip_str; // Esto estará ocacionando la violación de segmento?
 
                 if (db_manger.m_is_ip_blocked(client_ip)) [[unlikely]] {
-                    shutdown(client_sock, SHUT_RDWR);
+                    debug_log("Ip baneado:" + client_ip);
+                    // shutdown(client_sock, SHUT_RDWR);
                     close(client_sock);
                     continue;
                 }
+                debug_log("IP CLIEnTE: " + client_ip);
+
+                ///////////////////////////////////////////////////
+                // El tamaño máximo del lambda con ip es 40 bytes, así que eso no es
+                // lo que ocaciona la violación de segmento.
+                //////////////////////////////////////////////////
+                // auto lambda = [client_sock]() mutable {};
+                // std::cout << "Tamaño del lambda: " << sizeof(decltype(lambda)) << " bytes\n";  
 
                 // Encolar en el ThreadPool
-                if (!try_enqueue_client(client_sock, myThreadPool)) {
-                    continue;
-                }
+                try_enqueue_client(client_sock, myThreadPool);
             }
         }
-        // while (true) {
-        //     sockaddr_in client_addr{};
-        //     socklen_t addrlen = sizeof(client_addr);
-        //     int client_sock = accept(server_fd, (struct sockaddr*)&client_addr, &addrlen);
-
-        //     if (client_sock < 0) [[unlikely]] {
-        //         debug_log("Fallo al aceptar conexión.");
-        //         continue;
-        //     }
-            
-        //     // ========================
-        //     // protección básica al socket
-        //     // ========================
-        //     int opt = 1;
-        //     setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
-        //     setsockopt(client_sock, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
-
-        //     // ========================
-        //     // verificar ip cliente
-        //     // ========================
-        //     char ip_str[INET_ADDRSTRLEN];
-        //     inet_ntop(AF_INET, &client_addr.sin_addr, ip_str, sizeof(ip_str));
-        //     std::string client_ip = ip_str;
-
-        //     if (db_manger.m_is_ip_blocked(client_ip)) [[unlikely]] {// DROP inmediato
-        //         // ==========================================================================
-        //         // Se puede NO usar shutdown y close para dejar al cliente bloqueado y en espera
-        //         // Pero esto es una arma de doble filo ya que ocupa recursos internos y al
-        //         // no cerrar el socket la tabla FD crece.
-        //         // ==========================================================================
-        //         shutdown(client_sock, SHUT_RDWR);
-        //         close(client_sock);
-        //         continue;
-        //     }
-
-        //     if (!try_enqueue_client(client_sock, myThreadPool)) {
-        //         continue;
-        //     }
-
-        //     // myThreadPool.enqueue([client_sock]() mutable {
-        //     //     try {
-        //     //         handle_client(client_sock);
-        //     //     } catch (const std::exception& e) {
-        //     //         debug_log(std::string("Excepción al manejar cliente: ") + e.what());
-        //     //     } catch (...) {
-        //     //         debug_log("Excepción desconocida al manejar cliente.");
-        //     //     }
-        //     //     debug_log("Cerrando conexión cliente");
-        //     //     shutdown(client_sock, SHUT_RDWR);
-        //     //     close(client_sock); // Siempre cerrar
-        //     // });
-        // }
 
         debug_log("Cerrando servidor...");
         close(server_fd);
         debug_log("Terminado...");
-        if (log_file.is_open()) log_file.close();
+        if (log_file.is_open()) {
+            log_file.close();
+        }
         return 0;
-
+    } catch (const std::runtime_error& e) {
+        fatal_error(std::string("ERROR fatal: ") + e.what());
     } catch (const std::exception& e) {
         fatal_error(std::string("Excepción fatal: ") + e.what());
     } catch (...) {
         fatal_error("Excepción fatal desconocida.");
     }
-    debug_log("Cierre anormal...");
+    std::cerr << "Cierre anormal...";
 }
+
+__attribute__((section(".rodata.pccssystems.version"), used))
+const char app_version[] = "0.3.1";
+__attribute__((section(".rodata.pccssystems.author"), used))
+const char app_author[] = "Strapicarus";

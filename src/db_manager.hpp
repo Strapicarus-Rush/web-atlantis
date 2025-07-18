@@ -12,13 +12,14 @@
 
 #include "utils.hpp"
 
-// #define DB_PATH "main.db"
+extern void add_user(const std::string& username, const std::string& password);
 
 class DBManager {
 public:
     explicit DBManager(const std::string& db_path) 
     : db_path(db_path), db(nullptr)
     {
+        debug_log("DB: " + db_path);
         if (sqlite3_open(db_path.c_str(), &db) != SQLITE_OK) {
             debug_log(std::string("Failed to open DB: ") + sqlite3_errmsg(db));
             db = nullptr;
@@ -29,25 +30,6 @@ public:
         if (db) {
             sqlite3_close(db);
         }
-    }
-
-    bool m_execute(const std::string& sql, const std::vector<std::string>& params = {}) {
-        std::lock_guard<std::mutex> lock(db_mutex);
-        sqlite3_stmt* stmt = nullptr;
-
-        if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
-            log_sqlite_error("Prepare failed");
-            return false;
-        }
-
-        if (!bind_all(stmt, params)) {
-            sqlite3_finalize(stmt);
-            return false;
-        }
-
-        bool success = (sqlite3_step(stmt) == SQLITE_DONE);
-        sqlite3_finalize(stmt);
-        return success;
     }
 
     // bool m_select(const std::string& sql,
@@ -74,18 +56,6 @@ public:
     //     return true;
     // }
 
-    bool m_begin_transaction() {
-        return m_execute("BEGIN TRANSACTION;");
-    }
-
-    bool m_commit_transaction() {
-        return m_execute("COMMIT;");
-    }
-
-    bool m_rollback_transaction() {
-        return m_execute("ROLLBACK;");
-    }
-
     bool m_is_ip_blocked(const std::string& ip) {
         std::lock_guard<std::mutex> lock(db_mutex);
         sqlite3_stmt* stmt = nullptr;
@@ -102,15 +72,17 @@ public:
         return blocked;
     }
 
-    bool m_initialize_database() {
-        std::string db_path = get_db_path();
-        if (std::filesystem::exists(db_path)) {
-            return true;
+    void m_initialize_database() {
+        std::string db_path = m_get_db_path();
+        debug_log("inicialización db:" + db_path);
+
+        if (m_is_schema_initialized()) {
+            debug_log("Base de datos ya inicializada.");
+            return;
         }
 
         if (!m_begin_transaction()) {
-            debug_log("Error al iniciar la transacción de inicialización");
-            return false;
+            std::runtime_error("Error al iniciar la transacción de inicialización");
         }
 
         std::vector<std::string> init_sql = {
@@ -145,25 +117,20 @@ public:
 
         for (const auto& sql : init_sql) {
             if (!m_execute(sql)) {
-                debug_log("Fallo al ejecutar SQL de inicialización");
                 m_rollback_transaction();
-                return false;
+                std::runtime_error("Fallo al ejecutar SQL de inicialización");
             }
         }
 
         if (!m_commit_transaction()) {
-            debug_log("Error al confirmar transacción");
-            return false;
+            std::runtime_error("Error al confirmar transacción");
         }
 
-        return add_user("admin", "admin");
+        add_user("admin", "admin");
+
     }
 
-    bool add_user(const std::string& username, const std::string& password) {
-        return m_execute("INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)", {username, password});
-    }
-
-    std::string get_db_path() const {
+    std::string m_get_db_path() const {
         return db_path;
     }
 
@@ -180,6 +147,51 @@ private:
             }
         }
         return true;
+    }
+
+    bool m_execute(const std::string& sql, const std::vector<std::string>& params = {}) {
+        std::lock_guard<std::mutex> lock(db_mutex);
+        sqlite3_stmt* stmt = nullptr;
+
+        if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+            log_sqlite_error("Prepare failed");
+            return false;
+        }
+
+        if (!bind_all(stmt, params)) {
+            log_sqlite_error("bind_all failed");
+            sqlite3_finalize(stmt);
+            return false;
+        }
+
+        bool success = (sqlite3_step(stmt) == SQLITE_DONE);
+        sqlite3_finalize(stmt);
+        return success;
+    }
+
+    bool m_is_schema_initialized() {
+        const char* check_sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='users';";
+        sqlite3_stmt* stmt = nullptr;
+
+        if (sqlite3_prepare_v2(db, check_sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return false;
+        }
+
+        bool initialized = (sqlite3_step(stmt) == SQLITE_ROW);
+        sqlite3_finalize(stmt);
+        return initialized;
+    }
+
+    bool m_begin_transaction() {
+        return m_execute("BEGIN TRANSACTION;");
+    }
+
+    bool m_commit_transaction() {
+        return m_execute("COMMIT;");
+    }
+
+    bool m_rollback_transaction() {
+        return m_execute("ROLLBACK;");
     }
 
     void log_sqlite_error(const char* context) {

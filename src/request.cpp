@@ -1,44 +1,41 @@
-// #include "debug_log.hpp"
 #include <emmintrin.h>  // SSE2
 #include <regex>
 #include <netinet/in.h>
-#include <unistd.h>
 #include <vector>
 #include <cerrno> 
 #include <cstring>
 #include <unordered_map>
 #include <filesystem>
 #include "utils.hpp"
-#include "tmux_manager.hpp"
-#include <json.hpp>
-
-using json = nlohmann::json;
-
+#include "router.hpp"
 
 // ========================
 // Declaraciones externas
 // ========================
 extern bool validate_token(const std::string& token);
-extern std::string get_mime_type(const std::string& path);
-extern void handle_login(int& client_sock, const std::string& body);
 extern void handle_edit_user(int& client_sock, const std::string& request, const std::string& body);
-extern int connect_to_tmux_socket();
-extern std::string read_tmux_pane(int fd, const std::string& target_pane);
-extern bool dispatch_route(int& client_sock, const std::string& method, const std::string& path, const std::string& body, const bool& validated);
-
+// extern int connect_to_tmux_socket();
+// extern std::string read_tmux_pane(int fd, const std::string& target_pane);
 
 // ========================
 // Restricciones
 // ========================
+static const std::vector<std::string> botKeywords = {
+    "bot","crawl", "spider","slurp", "fetch", "scrape", "scanner", "archive", "httpclient", "wget", "libwww", "python", "scrapy",
+    "aiohttp", "go-http-client", "okhttp", "java", "perl", "node.js", "nodejs", "node", "axios", "http_request2", "ruby", "feed", "go", "lib",
+    "facebookexternalhit", "facebook", "meta", "discord", "discordbot", "slackbot", "telegrambot", "telegram", "whatsapp", "postmanruntime",
+    "postman", "chatgpt", "openai", "gpt", "ahrefs", "semrush", "dotbot", "baiduspider", "yandex", "google", "gemeni", "grok", "duckduck",
+    "mj12bot", "screaming", "frog", "bingpreview", "duckduckbot", "microsoft", "bing", "oracle", "sun", "http"
+};
 
-static const std::regex userAgentRegex(R"(^User-Agent:\s*(.+)\r?$)", std::regex::icase | std::regex::multiline);
-static const std::regex botPattern(R"((bot|crawl|spider|slurp|fetch|scrape|scanner|archiver|httpclient|wget|curl|libwww|python|scrapy|aiohttp|go-http-client|okhttp|java|perl|node\.js|axios|http_request2|ruby|feed|facebookexternalhit|discordbot|slackbot|telegrambot|WhatsApp|PostmanRuntime|chatgpt|openai|gpt|ahrefs|semrush|dotbot|baiduspider|yandex|mj12bot|screaming frog|bingpreview|duckduckbot))", std::regex::icase);
-
-bool containsBotUserAgent(const std::string& httpRequest) {
-    std::smatch match;
-    if (std::regex_search(httpRequest, match, userAgentRegex)) {
-        std::string userAgent = match[1].str();
-        return std::regex_search(userAgent, botPattern);
+bool containsBotUserAgent(const std::string& userAgent) {
+    std::string lowered;
+    lowered.reserve(userAgent.size());
+    lowered = to_lower(userAgent);
+    for (const auto& keyword : botKeywords) {
+        if (lowered.find(keyword) != std::string::npos) {
+            return true;
+        }
     }
     return false;
 }
@@ -88,15 +85,14 @@ static bool contains_control_chars_simd(const char* s, size_t len) {
 }
 
 static bool is_path_safe(const std::string& raw_path) {
-    debug_log("Is path safe?....");
-    debug_log("Path: " + raw_path);
+
     if (__builtin_expect(raw_path.empty() || raw_path.size() > 40, 0)) {
-        debug_log("Path empty or too long");
-        return false;
+        throw std::runtime_error("Path vacio o muy largo" + raw_path);
     }
 
-    char path[64] = {};
+    char path[41] = {};
     size_t j = 0;
+
     for (size_t i = 0; i < raw_path.length() && j < sizeof(path) - 1; ++i) {
         if (raw_path[i] == '%' && i + 2 < raw_path.size()) {
             char hex[3] = { raw_path[i + 1], raw_path[i + 2], '\0' };
@@ -106,50 +102,41 @@ static bool is_path_safe(const std::string& raw_path) {
             path[j++] = raw_path[i];
         }
     }
+
     path[j] = '\0';
-    debug_log(path);
+
     if (__builtin_expect(path[0] != '/', 0)) {
-        debug_log("Path start diferent to root /");
-        return false;
+        throw std::runtime_error("Path index 0 diferente a root /");
     }
 
     if (__builtin_expect(contains_control_chars_simd(path, j),0)) {
-        debug_log("Path contains controls chars");
-        return false;
+        throw std::runtime_error("Path contiene caracteres de control");
     }
 
     if (__builtin_expect(strstr(path, "..") || strchr(path, '~') || strchr(path, '\\') || strchr(path, '%'),0)) {
-        debug_log("Path contains .., ~ or \\");
-        return false;
+        throw std::runtime_error("Path contiene .., ~ o \\");
     }
 
     if (__builtin_expect(has_consecutive_slashes(raw_path.c_str()),0)) {
-        debug_log("Path has consecutive slashes //");
-        return false;
+        throw std::runtime_error("Path consecutivos slashes //");
     }
 
     if (__builtin_expect(!std::regex_match(path, safe_pattern),0)) {
-        debug_log("Path do not meet regex safe pathern");
-        return false;
+        throw std::runtime_error("Path peligroso detectado");
     }
 
-    // SQL injection signatures (branch-hinting on unlikely match)
     for (const char* sig : sql_injection_signatures) {
         if (__builtin_expect(strstr(path, sig) != nullptr, 0)) {
-            debug_log("Path have sql injection pathern");
-            return false;
+            throw std::runtime_error("sql injection detectado");
         }
     }
 
-    // Allowed prefixes (hint: likely match)
     for (const char* prefix : allowed_prefixes) {
         size_t len = std::strlen(prefix);
         if (__builtin_expect(std::strncmp(path, prefix, len) == 0, 1)) {
-            debug_log("Path has allowed_prefixes");
             return true;
         }
     }
-    debug_log("Path do not find any malicious pather");
 
     return false;
 }
@@ -158,44 +145,171 @@ static bool is_path_safe(const std::string& raw_path) {
 // Manejo de peticiones
 // ========================
 
-struct ClientRequest {
-    int client_sock;
-    std::string client_ip;
+static const std::vector<char> empty_body;
 
-    std::string method;
-    std::string path;
-    std::string http_version;
+std::string safe_strerror(int errnum) {
+    char buffer[256];
+#if defined(__GLIBC__) && !_GNU_SOURCE
+    strerror_r(errnum, buffer, sizeof(buffer));
+    return std::string(buffer);
+#else
+    return std::string(strerror_r(errnum, buffer, sizeof(buffer)));
+#endif
+}
 
-    std::unordered_map<std::string, std::string> headers;
-    std::string raw_request;
-    std::string body;
+inline std::string get_status_text(int code) {
+    switch (code) {
+        [[likely]] case 200: return "OK";
+        case 201: return "Created";
+        case 202: return "Accepted";
+        case 204: return "No Content";
+        case 301: return "Moved Permanently";
+        [[likely]] case 302: return "Found";
+        case 304: return "Not Modified";
+        case 400: return "Bad Request";
+        [[likely]] case 401: return "Unauthorized";
+        case 403: return "Forbidden";
+        [[likely]] case 404: return "Not Found";
+        case 405: return "Method Not Allowed";
+        case 408: return "Request Timeout";
+        case 429: return "Too Many Requests";
+        [[likely]] case 500: return "Internal Server Error";
+        case 501: return "Not Implemented";
+        case 502: return "Bad Gateway";
+        case 503: return "Service Unavailable";
+        [[unlikely]] default:  return "Unknown Status";
+    }
+}
 
-    // Headers comunes
-    std::string host;
-    std::string user_agent;
-    std::string accept;
-    std::string accept_language;
-    std::string accept_encoding;
-    std::string content_type;
-    std::string content_length;
-    std::string authorization;
-    std::string connection;
-    std::string upgrade_insecure_requests;
-    std::string cache_control;
-    std::string pragma;
-    std::string referer;
-    std::string cookie;
+static const std::string get_cookie_value(const std::string& cookie_header, const std::string& key) {
+    size_t pos = 0;
+    const size_t len = cookie_header.length();
 
-    // Parámetros
-    std::unordered_map<std::string, std::string> get_params;
-    std::unordered_map<std::string, std::string> post_params;
+    while (pos < len) {
+        while (pos < len && (cookie_header[pos] == ' ' || cookie_header[pos] == ';')) ++pos;
 
-    // JSON body
-    json json_body = json::object();
-};
+        size_t equal_pos = cookie_header.find('=', pos);
+        if (equal_pos == std::string::npos) break;
 
-// Función para parsear parámetros tipo key=value&key2=value2
-static std::unordered_map<std::string, std::string> parse_urlencoded_params(const std::string& s) {
+        std::string name = cookie_header.substr(pos, equal_pos - pos);
+
+        if (name == key) {
+            size_t value_start = equal_pos + 1;
+            size_t value_end = cookie_header.find(';', value_start);
+            if (value_end == std::string::npos) value_end = len;
+            return cookie_header.substr(value_start, value_end - value_start);
+        }
+
+        // Avanzar al siguiente cookie
+        pos = cookie_header.find(';', equal_pos);
+        if (pos == std::string::npos) break;
+        ++pos;
+    }
+
+    return "";
+}
+
+///////////////////////////////////
+// Métodos de HttpResponse
+//////////////////////////////////
+HttpResponse::HttpResponse(int code, std::string_view status, std::string_view content, std::string_view type)
+    : status_code(code), status_text(status), content_type(type) {
+    body.assign(content.begin(), content.end());
+}
+
+// void HttpResponse::set_status(int code, std::string_view text) {
+//     status_code = code;
+//     status_text = text;
+// }
+
+void HttpResponse::set_status(int code) {
+    status_code = code;
+    switch (code) {
+        case 200: status_text = "OK"; break;
+        case 201: status_text = "Created"; break;
+        case 400: status_text = "Bad Request"; break;
+        case 401: status_text = "Unauthorized"; break;
+        case 403: status_text = "Forbidden"; break;
+        case 404: status_text = "Not Found"; break;
+        case 500: status_text = "Internal Server Error"; break;
+        default: status_text = "Unknown"; break;
+    }
+}
+
+void HttpResponse::set_json_body(const json& j) {
+    std::string str = j.dump(); // serializa el JSON a string
+    set_body(str);
+    set_content_type("application/json");
+}
+
+void HttpResponse::set_body(std::string_view content) {
+    body.assign(content.begin(), content.end());
+}
+
+void HttpResponse::set_content_type(std::string_view type) {
+    content_type = type;
+}
+
+void HttpResponse::add_header(std::string_view key, std::string_view value) {
+    headers[std::string(key)] = std::string(value);
+}
+
+void HttpResponse::add_cookie(std::string_view cookie) {
+    cookies.emplace_back(cookie);
+}
+
+std::string HttpResponse::build_header_string(bool dev_mode) const {
+    std::ostringstream out;
+
+    out << http_version << " " << status_code << " " << status_text << "\r\n";
+    out << "Content-Type: " << content_type << "\r\n";
+    out << "Content-Length: " << body.size() << "\r\n";
+
+    out << "X-Strapicarus: god\r\n";
+    out << "X-Frame-Options: DENY\r\n";
+    out << "Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'\r\n";
+
+    if (!dev_mode) {
+        out << "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\r\n";
+    }
+
+    out << "Referrer-Policy: no-referrer\r\n";
+    out << "Permissions-Policy: camera=(), microphone=(), geolocation=(), fullscreen=(), payment=(), usb=(), clipboard-write=()\r\n";
+
+    for (const auto& [key, value] : headers) {
+        out << key << ": " << value << "\r\n";
+    }
+
+    for (const auto& cookie : cookies) {
+        out << "Set-Cookie: " << cookie << "\r\n";
+    }
+
+    out << (close_connection ? "Connection: close\r\n" : "Connection: keep-alive\r\n");
+    out << "\r\n";
+    return out.str();
+}
+
+bool HttpResponse::send(bool dev_mode) const {
+    std::string header_str = build_header_string(dev_mode);
+
+    if (!send_all(*this, header_str.data(), header_str.size())) {
+        throw std::runtime_error("Error al enviar cabecera: " + safe_strerror(errno));
+    }
+
+    if (!body.empty()) {
+        if (!send_all(*this, body.data(), body.size())) {
+            throw std::runtime_error("Error al enviar cuerpo: " + safe_strerror(errno));
+        }
+    }
+    close_client(client_sock);
+    return true;
+}
+
+
+///////////////////////////////////
+// Manejo del Requeest.
+//////////////////////////////////
+static const std::unordered_map<std::string, std::string> parse_urlencoded_params(const std::string& s) {
     std::unordered_map<std::string, std::string> result;
     std::istringstream stream(s);
     std::string pair;
@@ -211,12 +325,23 @@ static std::unordered_map<std::string, std::string> parse_urlencoded_params(cons
     return result;
 }
 
-// Función para parsear el request
-static bool parse_client_request(int client_sock, const std::string& client_ip, ClientRequest& request_out) {
+static bool parse_client_request(int& client_sock, const std::string& client_ip, ClientRequest& request_out) {
+    if (__builtin_expect(client_sock < 0, 0)) {
+        throw std::runtime_error("Socket inválido");
+        
+    }
     char buffer[config.max_req_buf_size];
     ssize_t bytes_received = recv(client_sock, buffer, config.max_req_buf_size - 1, 0);
 
-    if (bytes_received <= 0) return false;
+    if (__builtin_expect(bytes_received <= 0, 0)) {
+        throw std::runtime_error("Error leyendo bytes_received del socket o conexión cerrada");
+    }
+
+    if (__builtin_expect(bytes_received == config.max_req_buf_size - 1, 0)) { // buffer lleno, es anormal...
+        // Posible truncamiento: el cliente podría haber enviado más de lo permitido.
+        throw std::runtime_error("Petición excede el tamaño máximo permitido (8KB)");
+    }
+
     buffer[bytes_received] = '\0';
 
     std::string request_str(buffer);
@@ -225,17 +350,29 @@ static bool parse_client_request(int client_sock, const std::string& client_ip, 
     request_out.raw_request = request_str;
 
     std::istringstream stream(request_str);
-    std::string line;
 
     // Parsear primera línea
+    std::string line;
     std::string full_path;
-    if (!std::getline(stream, line)) return false;
-    std::istringstream first_line(line);
-    if (!(first_line >> request_out.method >> full_path >> request_out.http_version)) {
-        return false;
+
+    if (!std::getline(stream, line)) {
+        throw std::runtime_error("LÍNEA NO VALIDA");
     }
 
-    // Separar path y query string
+    if (!line.empty() && line.back() == '\r') {
+        line.pop_back();
+    }
+
+    std::istringstream first_line(line);
+    if (!(first_line >> request_out.method >> full_path >> request_out.http_version)) {
+        throw std::runtime_error("FORMATOP INVÁLIDO");
+    }
+
+    if(!is_path_safe(full_path)){
+        throw std::runtime_error("PATH no seguro...");
+    } 
+
+    // Separar path y query string, para futuros usos
     size_t qpos = full_path.find('?');
     if (qpos != std::string::npos) {
         request_out.path = full_path.substr(0, qpos);
@@ -253,26 +390,43 @@ static bool parse_client_request(int client_sock, const std::string& client_ip, 
         std::string key = line.substr(0, colon);
         std::string value = line.substr(colon + 1);
 
-        key.erase(std::remove_if(key.begin(), key.end(), ::isspace), key.end());
-        value.erase(0, value.find_first_not_of(" \t\r\n"));
-        value.erase(value.find_last_not_of(" \t\r\n") + 1);
+        trim(key);
+        trim(value);
+        key.erase(std::remove_if(key.begin(), key.end(), ::isspace), key.end()); // por si acaso...
 
         request_out.headers[key] = value;
 
-        if (key == "Host") request_out.host = value;
-        else if (key == "User-Agent") request_out.user_agent = value;
-        else if (key == "Accept") request_out.accept = value;
-        // else if (key == "Accept-Language") request_out.accept_language = value;
-        // else if (key == "Accept-Encoding") request_out.accept_encoding = value;
-        else if (key == "Content-Type") request_out.content_type = value;
-        else if (key == "Content-Length") request_out.content_length = value;
-        else if (key == "Authorization") request_out.authorization = value;
-        else if (key == "Connection") request_out.connection = value;
-        else if (key == "Upgrade-Insecure-Requests") request_out.upgrade_insecure_requests = value;
-        else if (key == "Cache-Control") request_out.cache_control = value;
-        else if (key == "Pragma") request_out.pragma = value;
-        else if (key == "Referer") request_out.referer = value;
-        else if (key == "Cookie") request_out.cookie = value;
+        if (key == "Host") {
+            request_out.host = value;
+        } else if (key == "User-Agent") {
+            if (containsBotUserAgent(value)){
+                throw std::runtime_error("User-Agent NO PERMITIDO...");
+            } 
+            request_out.user_agent = value;
+        } else if (key == "Accept") {
+            request_out.accept = value;
+        } else if (key == "Content-Type") {
+            request_out.content_type = value;
+        } else if (key == "Content-Length") {
+            request_out.content_length = value;
+        } else if (key == "Cookie") {
+            debug_log("Cookie: " + value);
+            request_out.cookie = value;
+            request_out.authorization = get_cookie_value(request_out.cookie, "Authorization");
+            if (validate_token(request_out.authorization)){
+                request_out.validated = true;
+            } 
+        } else if (key == "Connection") {
+            request_out.connection = value;
+        } else if (key == "Upgrade-Insecure-Requests") {
+            request_out.upgrade_insecure_requests = value;
+        } else if (key == "Cache-Control") {
+            request_out.cache_control = value;
+        } else if (key == "Pragma") {
+            request_out.pragma = value;
+        } else if (key == "Referer") {
+            request_out.referer = value;
+        } 
     }
 
     // Leer body (si hay Content-Length)
@@ -280,7 +434,9 @@ static bool parse_client_request(int client_sock, const std::string& client_ip, 
     if (!request_out.content_length.empty()) {
         try {
             content_length = std::stoi(request_out.content_length);
-        } catch (...) {}
+        } catch (...) {
+            throw std::runtime_error("Fallṕ parse content_length");
+        }
     }
 
     if (content_length > 0) {
@@ -288,182 +444,123 @@ static bool parse_client_request(int client_sock, const std::string& client_ip, 
         if (remaining.size() >= static_cast<size_t>(content_length)) {
             request_out.body = remaining.substr(0, content_length);
 
-            // application/x-www-form-urlencoded
-            if (request_out.content_type.find("application/x-www-form-urlencoded") != std::string::npos) {
+            if (request_out.content_type.find("application/x-www-form-urlencoded") != std::string::npos) { // usos futuros
                 request_out.post_params = parse_urlencoded_params(request_out.body);
             }
 
-            // application/json
             if (request_out.content_type.find("application/json") != std::string::npos) {
                 try {
+                    debug_log(request_out.body);
                     request_out.json_body = json::parse(request_out.body);
                 } catch (const std::exception& e) {
-                    std::cerr << "Error al parsear JSON: " << e.what() << "\n";
-                    request_out.json_body = json::object();
+                    throw std::runtime_error(std::string("Error al parsear JSON: ") + e.what());
                 }
+            }else{
+                throw std::runtime_error("Se esperaba formato json");
             }
         }
     }
-
     return true;
 }
 
-static const std::regex get_req_regex("GET (/[^ ]*) HTTP/1.1");
-static const std::vector<char> empty_body;
+void handle_get_request(const ClientRequest& req) {
+    std::string filename;
+    HttpResponse res;
+    res.client_sock = req.client_sock;
 
-static const std::string read_request(const int& client_sock) {
-    if (__builtin_expect(client_sock < 0, 0)) {
-        debug_log("Socket inválido");
-        return "Error";
-    }
-    char buffer[config.max_req_buf_size];
-    int bytes = read(client_sock, buffer, config.max_req_buf_size - 1);
-
-    if (__builtin_expect(bytes <= 0, 0)) {
-        throw std::runtime_error("Error leyendo del socket o conexión cerrada");
-    }
-
-    if (__builtin_expect(bytes == config.max_req_buf_size - 1, 0)) { // buffer lleno, es anormal según el diseño.
-        // Posible truncamiento: el cliente podría haber enviado más de lo permitido.
-        shutdown(client_sock, SHUT_RDWR);
-        close(client_sock);
-        throw std::runtime_error("Petición excede el tamaño máximo permitido (8KB)");
-    }
-
-    return std::string(buffer, bytes);
-}
-
-void close_client(const int& client_sock){
-    debug_log("Close client_sock");
-    shutdown(client_sock, SHUT_RDWR);
-    close(client_sock);
-}
-
-void send_response(const int& client_sock, const std::string& status, const std::vector<char>& body, const std::string& content_type, const std::string& extra_headers = "") {
-    
-    try{
-        std::ostringstream header;
-
-        header << "HTTP/1.1 " << status << "\r\n";
-        header << "Content-Type: " << content_type << "\r\n";
-        header << "Content-Length: " << body.size() << "\r\n";
-        header << "X-Strapicarus: god\r\n";
-        header << "X-Frame-Options: DENY\r\n";
-        header << "Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'\r\n";
-
-        if (__builtin_expect(!config.dev_mode, 0)) //cambiar 0 a 1 para producción o mejor eliminar el if, solo si se espera cominucación SSL
-        {
-            header << "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\r\n";
+    if (has_dot(req.path))
+    {
+        if (get_mime_type(req.path) == "Error"){
+            send_error(req.client_sock, 404, false);
+            return;
         }
-
-        header << "Referrer-Policy: no-referrer\r\n";
-        header << "Permissions-Policy: camera=(), microphone=(), geolocation=(), fullscreen=(), payment=(), usb=(), clipboard-write=()\r\n";
-
-        if (!extra_headers.empty()) {
-            header << extra_headers;
-            if (__builtin_expect(extra_headers.back() != '\n',0)) {
-                header << "\r\n";
+        filename = get_public_path() + req.path;
+        res.set_content_type(get_mime_type(filename));
+    }else{
+        if (req.path == "/") [[likely]] {
+            if (req.validated) [[likely]] {
+                res.set_status(302);
+                res.add_header("Location", "/panel");
+                filename = get_public_path() + "/panel/index.html";
+            } else [[unlikely]] {
+                filename = get_public_path() + "/index.html";
+            }
+        } else if (req.path == "/panel") [[likely]] {
+            if (!req.validated) [[unlikely]] {
+                send_error(req.client_sock, 401, true);
+                return;
+            } else [[likely]] {
+                filename = get_public_path() + "/panel/index.html";
             }
         }
-
-        header << "Connection: close\r\n\r\n";
-        std::string header_str = header.str();
-
-        debug_log("Sending response");
-        ssize_t sent1 = send(client_sock, header_str.c_str(), header_str.size(), MSG_NOSIGNAL);
-
-        if (__builtin_expect(sent1 == -1, 0)) {
-            debug_log(std::string("Error al enviar cabecera: ") + std::strerror(errno));
-            close_client(client_sock);
-            return;
-        }
-
-        ssize_t sent2 = send(client_sock, body.data(), body.size(), MSG_NOSIGNAL); //MSG_NOSIGNAL para evitar cierre silencioso por SIGPIPE
-        if (__builtin_expect(sent2 == -1, 0)) {
-            debug_log(std::string("Error al enviar cuerpo: ") + std::strerror(errno));
-            close_client(client_sock);
-            return;
-        }
-
-        // debug_log("Response HEADER: \n" + header.str());
-        // debug_log(std::string(body.begin(), body.end()));
-
-    }catch(const std::exception& e) {
-        debug_log(std::string("Excepción al manejar cliente: ") + e.what());
-    } catch (...) {
-        debug_log("Excepción desconocida al manejar cliente");
+        res.set_content_type(get_mime_type(filename));
     }
 
-    close_client(client_sock);
+    if (!std::filesystem::exists(filename)) [[unlikely]] {
+        send_error(req.client_sock, 404, true);
+        return;
+    }
+
+    std::ifstream file(filename, std::ios::binary);
+    if (!file) [[unlikely]] {
+        send_error(req.client_sock, 500, true);
+        return;
+    }
+
+    res.body.assign((std::istreambuf_iterator<char>(file)), {});
+    if(res.send()){
+        debug_log("Response Sent...\n\n\n");
+    }
 }
 
-void send_error(const int& client_sock, const int& code, const bool& send_file = false) {
-    static const std::unordered_map<int, std::string> status_map = {
-        {400, "400 Bad Request"},
-        {401, "401 Unauthorized"},
-        {403, "403 Forbidden"},
-        {404, "404 Not Found"},
-        {405, "405 Method Not Allowed"},
-        {408, "408 Request Timeout"},
-        {409, "409 Conflict"},
-        {410, "410 Gone"},
-        {418, "418 I'm a teapot"},
-        {429, "429 Too Many Requests"},
-        {451, "451 Unavailable For Legal Reasons"},
-        {500, "500 Internal Server Error"},
-        {501, "501 Not Implemented"},
-        {502, "502 Bad Gateway"},
-        {503, "503 Service Unavailable"},
-        {504, "504 Gateway Timeout"}
-    };
-
-    auto it = status_map.find(code);
-    std::string status = (it != status_map.end()) ? it->second : "500 Internal Server Error";
-    debug_log("send_error " + status);
-    if(__builtin_expect(send_file, 0)) {
-        std::string filepath = get_public_path() + "/error/" + std::to_string(code) + ".html";
-        debug_log("Error html path :" + filepath);
-        std::ifstream file(filepath, std::ios::binary);
-
-        if (!file.is_open()) [[unlikely]] {
-            // Fallback si no encuentra el HTML
-            debug_log("Error file not found: " + filepath);
-            std::string fallback = "<html><body><h1>" + status + "</h1><p>Error HTML no encontrado.</p></body></html>";
-            std::vector<char> fallback_vec(fallback.begin(), fallback.end());
-            send_response(client_sock, status, fallback_vec, "text/html");
-            return;
-        }else [[likely]] {
-            std::vector<char> content((std::istreambuf_iterator<char>(file)), {});
-            send_response(client_sock, status, content, "text/html");    
+void handle_post_request(const ClientRequest& request) {
+    if (request.path == "/login")
+    {
+        if (!dispatch_route(request)) {
+            debug_log("POST dispatch_route fail...");
         }
-    }else [[likely]]{
-         send_response(client_sock, status, empty_body, "text/html");
-    }
-    
+    } else if(!request.validated){
+        send_error(request.client_sock, 403, true);
+    }else{
+        if (!dispatch_route(request)) {
+            send_error(request.client_sock, 404, false);
+        }
+    }    
 }
 
+void handle_report_request(const ClientRequest& request) {
 
-void get_auth_cookie(const std::string& request, std::string& token){
-    std::regex auth_regex(R"(Cookie:\s*(.*))");
-    std::smatch match;
-
-    if (std::regex_search(request, match, auth_regex)) [[likely]] {
-        std::string cookies = match[1];
-        auto eol = cookies.find_first_of("\r\n");
-        if (eol != std::string::npos){
-                cookies = cookies.substr(0, eol);
-        }
-        std::regex token_regex(R"(Authorization=([^;]+))");
-        std::smatch token_match;
-        if (std::regex_search(cookies, token_match, token_regex)) [[likely]] {
-            debug_log("AUTH cookie FOUND");
-            token = token_match[1];
-        } else  [[unlikely]] {
-            debug_log("Authorization token no encontrado en Cookie..");
-            token = "";
-        }
+    if (!dispatch_route(request)) {
+        debug_log("REPORT dispatch_route fail...");
     }
-    // Aquí agregar un contador de peticiones por ip para realizar baneo si excede 5
+}
+
+void handle_client(int client_sock) {
+
+    ClientRequest request;
+    if(!parse_client_request(client_sock, "0.0.0.0", request)){
+        throw std::runtime_error("Fallo Parseo de request");
+    }
+    debug_log("\n_____________________________________________________________________");
+    debug_log("\n\n" + request.raw_request);
+    try{
+        if (request.method == "GET") {
+            handle_get_request(request);
+        } else if (request.method == "POST") {
+            handle_post_request(request);
+        } else if (request.method == "REPORT") {
+            if (request.validated) {
+                handle_report_request(request);
+            } else {
+                send_error(request.client_sock, 401, true);
+            }
+        } else {
+            send_error(request.client_sock, 405, true);
+        }
+    } catch (const std::runtime_error& e) {
+        debug_log(e.what());
+        send_error(request.client_sock, 500, true);
+    }
 }
 
 // void handle_console_request(int& client_sock){//, const std::string& request) {
@@ -479,158 +576,6 @@ void get_auth_cookie(const std::string& request, std::string& token){
 //     }
 //     close_client(client_sock);
 // }
-
-// --------------------- GET ---------------------
-void handle_get_request(int& client_sock, const std::string& request, 
-                        bool& validated, std::string& extra_header, 
-                        std::string& status) 
-{
-    std::smatch match;
-    if (!std::regex_search(request, match, get_req_regex)) {
-        debug_log("regex not found");
-        send_error(client_sock, 400, true);
-        close_client(client_sock);
-        return;
-    }
-
-    std::string path = match[1];
-    if(!is_path_safe(path)) send_error(client_sock, 400, true);
-
-    std::string filename;
-    debug_log("path:" + path);
-    if (path == "/" || path == "/index" || path == "/index.html" || path == "/login") [[likely]] {
-        if(validated) [[likely]] {
-            debug_log("TOKEN FOUND - REDIRECTING...");
-            extra_header = "Location: /panel\r\n";
-            status = "302 FOUND";
-            filename = get_public_path() + "/panel/index.html";
-        } else [[unlikely]] {
-            debug_log("TOKEN NOT FOUND");
-            filename = get_public_path() + "/index.html";
-        }
-        
-    } else if (path == "panel" || path == "/panel" || path == "/panel/" || path == "/panel/index.html") [[unlikely]] {
-        
-        if (!validated) [[unlikely]] {
-            //agregar contador por ip para baneos
-            debug_log("Rejected token");
-            send_error(client_sock, 401, true);
-            close_client(client_sock);
-            return;
-        } else [[likely]] {
-            filename = get_public_path() + "/panel/index.html";
-        }
-    } else if (get_mime_type(path) == "Error") [[unlikely]] {
-        //Contador para baneos
-        send_error(client_sock, 404, false);
-        debug_log("MIME file " + get_mime_type(filename));
-        debug_log("Rejected file" + filename);
-        close_client(client_sock);
-        return;
-    } else [[likely]] {
-        filename = get_public_path() + path;
-    }
-
-    if (!std::filesystem::exists(filename)) [[unlikely]] {
-        //contador baneos
-        send_error(client_sock, 404, false);
-        close_client(client_sock);
-        return;
-    }
-
-    std::ifstream file(filename, std::ios::binary);
-    if (!file) [[unlikely]] {
-        //contador baneo
-        send_error(client_sock, 500, true);
-        close_client(client_sock);
-        return;
-    }
-
-    std::vector<char> content;
-    // if (!is_head) [[unlikely]] {
-        //contador baneo
-        content.assign((std::istreambuf_iterator<char>(file)), {});
-    // }
-    std::string mime = get_mime_type(filename);
-    send_response(client_sock, status, content, mime, extra_header);
-    // close_client(client_sock);
-}
-
-void handle_post_request(int& client_sock, const std::string& request, const bool& validated) {
-    std::smatch match;
-    std::regex post_req_regex("POST (/[^ ]+) HTTP/1.1");
-    if (!std::regex_search(request, match, post_req_regex)) {
-        debug_log("WORNG POST URL REGEX...");
-        send_error(client_sock, 400, false);
-        close_client(client_sock);
-        return;
-    }
-
-    std::string endpoint = match[1];
-    std::size_t body_pos = request.find("\r\n\r\n");
-    std::string body = (body_pos != std::string::npos) ? request.substr(body_pos + 4) : "";
-    debug_log("POST BODY: " + body);
-    if (!dispatch_route(client_sock, "POST", endpoint, body, validated)) {
-        debug_log("dispatch_route ERROR...");
-        send_error(client_sock, 404, false);
-        close_client(client_sock);
-    }
-}
-
-void handle_report_request(int& client_sock, const std::string& request, const bool& validated) {
-    std::smatch match;
-    std::regex post_req_regex("REPORT (/[^ ]+) HTTP/1.1");
-    if (!std::regex_search(request, match, post_req_regex)) {
-        send_error(client_sock, 400, false);
-        close_client(client_sock);
-        return;
-    }
-
-    std::string endpoint = match[1];
-    std::size_t body_pos = request.find("\r\n\r\n");
-    std::string body = (body_pos != std::string::npos) ? request.substr(body_pos + 4) : "";
-
-    if (!dispatch_route(client_sock, "REPORT", endpoint, body, validated)) {
-        send_error(client_sock, 404, false);
-    }
-    close_client(client_sock);
-}
-
-void handle_client(int& client_sock) {
-    std::string request = read_request(client_sock);
-    debug_log("\n\n" + request + "\n\n");
-    if (containsBotUserAgent(request)) return;
-    
-    std::string token;
-    bool validated = false;
-    std::string status = "200 OK";
-    get_auth_cookie(request, token);
-    std::string extra_header = "";
-    if(!token.empty() && validate_token(token)) validated = true;
-
-    if (request.starts_with("OPTIONS") || request.starts_with("HEAD")) {
-        // std::string extra_headers;                                               ///////////////////////////////////
-        // extra_headers += "Access-Control-Allow-Methods: GET, POST, REPORT\r\n";  ////                Evitar Cabeceras 
-        // extra_headers += "Access-Control-Allow-Headers: Content-Type\r\n";       ////  Access-Control-* Relacionadas con CORS, CORS no se usa.
-        // extra_headers += "Access-Control-Max-Age: 600\r\n"; // cache preflight   ///////////////////////////////////
-        return send_response(client_sock, "204 No Content", empty_body, "", "");
-    }
-    if (request.starts_with("GET")) {
-        debug_log("Recieved GET");
-        handle_get_request(client_sock, request, validated, extra_header, status);
-    } else if (request.starts_with("POST")) {
-        debug_log("Recieved POST");
-        handle_post_request(client_sock, request, validated);
-    } else if (request.starts_with("REPORT") && validated) {
-        if (!validated) return send_error(client_sock, 403, false);
-        debug_log("Recieved REPORT");
-        handle_report_request(client_sock, request, validated);
-    } else {
-        debug_log("Recieved NOT FOUND METHOD");
-        send_error(client_sock, 405, false);
-        close_client(client_sock);
-    }
-}
 
 // void handle_get_request(int& client_sock, const std::string& request) {
 //     std::smatch match;

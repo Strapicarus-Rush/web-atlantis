@@ -1,34 +1,21 @@
-/*:root {
-  --bg-light: #ffffff;
-  --bg-dark: #121212;
-  --bg-gray: #2e2e2e;
-
-  --text-light: #000000;
-  --text-dark: #ffffff;
-  --accent: #4a90e2;
-  --error: #ff4c4c;
-  --radius: 2rem;
-}*/
 :root {
-  --clr-bg-light: #f5f5f5;
-  --clr-text-light: #222222;
-  --clr-header-light: #e0e0e0;
-  --clr-footer-light: #d0d0d0;
 
-  --clr-bg-dark: #121212;
-  --clr-text-dark: #f0f0f0;
-  --clr-header-dark: #1e1e1e;
-  --clr-footer-dark: #1a1a1a;
+--clr-bg-light: #ffffff;
+--clr-text-light: #2b2b2b;
+--clr-header-light: #f0f0f0;
+--clr-footer-light: #e0e0e0;
+--clr-accent1-light: #2ecc71;
+--clr-accent2-light: #00bfa6;
 
-  --clr-accent1-light: #4a90e2; /*#875b9e;*/
-  --clr-accent2-light: #b68dbf;
-
-  --clr-accent1-dark: #c99bd6;
-  --clr-accent2-dark: #a96fbe;
+--clr-bg-dark: #101010;
+--clr-text-dark: #eeeeee;
+--clr-header-dark: #1a1a1a;
+--clr-footer-dark: #161616;
+--clr-accent1-dark: #27ae60;
 
   --radius: 1rem;
-  --padding: 1rem;
-  --transition-speed: 0.5s;
+  --padding: 0.1rem;
+  --transition-speed: 0.6s;
 }
 
 html[data-theme='light'] {
@@ -48,6 +35,45 @@ html[data-theme='dark'] {
   --clr-accent1: var(--clr-accent1-dark);
   --clr-accent2: var(--clr-accent2-dark);
 }
+/*:root {
+  --clr-bg-light: #f5f5f5;
+  --clr-text-light: #222222;
+  --clr-header-light: #e0e0e0;
+  --clr-footer-light: #d0d0d0;
+
+  --clr-bg-dark: #121212;
+  --clr-text-dark: #f0f0f0;
+  --clr-header-dark: #1e1e1e;
+  --clr-footer-dark: #1a1a1a;
+
+  --clr-accent1-light: #4a90e2;
+  --clr-accent2-light: #b68dbf;
+
+  --clr-accent1-dark: #c99bd6;
+  --clr-accent2-dark: #a96fbe;
+
+  --radius: 1rem;
+  --padding: 1rem;
+  --transition-speed: 0.5s;
+}*/
+
+/*html[data-theme='light'] {
+  --clr-bg: var(--clr-bg-light);
+  --clr-text: var(--clr-text-light);
+  --clr-header: var(--clr-header-light);
+  --clr-footer: var(--clr-footer-light);
+  --clr-accent1: var(--clr-accent1-light);
+  --clr-accent2: var(--clr-accent2-light);
+}
+
+html[data-theme='dark'] {
+  --clr-bg: var(--clr-bg-dark);
+  --clr-text: var(--clr-text-dark);
+  --clr-header: var(--clr-header-dark);
+  --clr-footer: var(--clr-footer-dark);
+  --clr-accent1: var(--clr-accent1-dark);
+  --clr-accent2: var(--clr-accent2-dark);
+}*/
 
 body {
   margin: 0;
@@ -91,7 +117,7 @@ input {
   font-size: 1rem;
 }
 
-button {
+/*button {
   background-color: var(--clr-accent);
   border: none;
   padding: 0.5rem 1rem;
@@ -99,19 +125,25 @@ button {
   border-radius: var(--radius);
   cursor: pointer;
   transition: background-color var(--transition-speed) ease;
-}
-/*button {
-  padding: 0.7rem;
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background 0.3s;
 }*/
 
+button {
+  background-color: var(--clr-accent2);
+  color: var(--clr-text);
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--clr-accent1);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
 button:hover {
-  background: #357ac8;
+  background-color: var(--clr-accent1);
+  transform: scale(1.03);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
 }
 
 .status-msg {

@@ -1,6 +1,65 @@
 document.addEventListener('DOMContentLoaded', () => {
+
+  let selectedInstance = undefined;
+  const selectorSelectText = "Selecciona una instancia";
+  const selectorStatusText = "Ver Status general";
+  let instancesList = []
   const tabs = document.querySelectorAll('.tab');
   const sections = document.querySelectorAll('.content');
+  const instanceSelector = document.getElementById('instanceSelector');
+  const generalStatus = document.getElementById('generalStatus');
+  const instanceStatus = document.getElementById('instanceStatus');
+  const instanceNameSpan = document.querySelector('[data-instance-name]');
+
+  function formatMemory(kb) {
+    if (kb == null || isNaN(kb)) return "-";
+
+    const mb = kb / 1024;
+    if (mb < 1024) {
+      return mb.toFixed(2) + " MB";
+    } else {
+      const gb = mb / 1024;
+      return gb.toFixed(2) + " GB";
+    }
+  }
+  
+  // =============================================================
+  //  Lógica para mostrar alertas
+  // =============================================================
+
+  function showAlert(message, type = 'success') {
+    const container = document.getElementById('alert-container');
+    const alert = document.createElement('div');
+    alert.classList.add('alert', type);
+    alert.innerHTML = `
+      <span>${message}</span>
+      <button class="close-btn" aria-label="Cerrar">&times;</button>
+    `;
+
+    const closeBtn = alert.querySelector('.close-btn');
+
+    closeBtn.addEventListener('click', () => closeAlert(alert));
+
+    container.appendChild(alert);
+
+    const timeout = setTimeout(() => {
+      closeAlert(alert);
+    }, 10000);
+
+    function closeAlert(el) {
+      clearTimeout(timeout);
+      el.style.animation = 'fadeOutAlert 0.4s ease-out forwards';
+      el.addEventListener('animationend', () => {
+        if (container.contains(el)) {
+          container.removeChild(el);
+        }
+      });
+    }
+  }
+
+  // =============================================================
+  //  Lógica para selección de pestañas
+  // =============================================================
 
   function switchTab(newTab) {
     const target = newTab.dataset.tab;
@@ -9,16 +68,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (newSection === currentSection) return;
 
-    // const direction = Array.from(sections).indexOf(newSection) > Array.from(sections).indexOf(currentSection)
-    //   ? 'left' : 'right';
+    stopContinuousUpdate(currentSection);
+
     currentSection.classList.remove('active');
-    currentSection.classList.add(`fade-out`);
-    // newSection.classList.add(`fade-in-${direction}`);
+    currentSection.classList.add('fade-out');
 
     setTimeout(() => {
-      currentSection.classList.remove(`fade-out`);
-      // newSection.classList.remove(`fade-in-${direction}`);
+      currentSection.classList.remove('fade-out');
       newSection.classList.add('active');
+
+      const updateType = newSection.dataset.update;
+      if (updateType === 'on-activate') {
+        updateContent(newSection);
+      } else if (updateType === 'continuous') {
+        startContinuousUpdate(newSection);
+      }
     }, 300);
   }
 
@@ -30,169 +94,61 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // document.getElementById('loadData').addEventListener('click', async (e) => {
-  //   const endpoint = e.target.dataset.endpoint;
-  //   try {
-  //     const response = await fetch(endpoint);
-  //     const json = await response.json();
-  //   } catch (error) {
-  //     console.error('Error al obtener datos:', error);
-  //   }
-  // });
+  // =============================================================
+  //  Lógica para manejo de funciones de secciones
+  // =============================================================
 
-  const canvas = document.getElementById('chartCanvas');
-  const ctx = canvas.getContext('2d');
-  let chartType = canvas.dataset.type;
+  const sectionFunctions = {
+    fetchStatus,
+    fetchInstanceData,
+    fetchConsole
+  };
 
-  function drawAxes(ctx, width, height, padding, maxVal, steps) {
-    const axisColor = '#888';
-    ctx.strokeStyle = axisColor;
-    ctx.fillStyle = axisColor;
-    ctx.font = '12px sans-serif';
+  function updateContent(section) {
+    const fnName = section.dataset.function;
+    const fn = sectionFunctions[fnName];
 
-    ctx.beginPath();
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, height - padding);
-    ctx.lineTo(width - padding, height - padding);
-    ctx.stroke();
-
-    for (let i = 0; i <= steps; i++) {
-      const val = Math.round((maxVal / steps) * i);
-      const y = height - padding - ((height - 2 * padding) / steps) * i;
-      ctx.fillText(val, 5, y + 3);
-      ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(width - padding, y);
-      ctx.strokeStyle = '#ccc';
-      ctx.stroke();
+    if (typeof fn === 'function') {
+      fn(section); // Ejecuta la función asignada a esta sección
+    } else {
+      showAlert(`Función "${fnName}" no está registrada.`, "Error");
     }
   }
 
-  function getAccentColors() {
-    const styles = getComputedStyle(document.documentElement);
-    return {
-      fill: styles.getPropertyValue('--clr-accent1').trim(),
-      stroke: styles.getPropertyValue('--clr-accent2').trim(),
-      text: styles.getPropertyValue('--clr-text').trim()
-    };
-  }
+  let updateIntervals = new Map();
 
-  function drawBarChart(ctx, data, labels, progress = 1) {
-    const { width, height } = canvas;
-    const padding = 40;
-    const maxVal = Math.max(...data);
-    const barWidth = (width - 2 * padding) / data.length;
-    const colors = getAccentColors();
+  function startContinuousUpdate(section) {
+    const key = section.dataset.content;
+    if (updateIntervals.has(key)) return; 
 
-    ctx.clearRect(0, 0, width, height);
-    drawAxes(ctx, width, height, padding, maxVal, 5);
-
-    data.forEach((val, i) => {
-      const animatedVal = val * progress;
-      const x = padding + i * barWidth + 10;
-      const y = height - padding - (animatedVal / maxVal) * (height - 2 * padding);
-      const h = (animatedVal / maxVal) * (height - 2 * padding);
-
-      // Draw bar
-      ctx.fillStyle = colors.fill;
-      ctx.fillRect(x, y, barWidth - 20, h);
-
-      // Labels below
-      ctx.fillStyle = colors.text;
-      ctx.fillText(labels[i], x + (barWidth - 20) / 2 - 5, height - padding + 15);
-
-      // Value above bar
-      if (progress > 0.95) {
-        ctx.fillText(val, x + (barWidth - 20) / 2 - 5, y - 8);
+    const interval = setInterval(() => {
+      if (section.classList.contains('active')) {
+        updateContent(section);
       }
-    });
+    }, 2000);
+
+    updateIntervals.set(key, interval);
   }
 
-  function drawLineChart(ctx, data, labels, progress = 1) {
-    const { width, height } = canvas;
-    const padding = 40;
-    const maxVal = Math.max(...data);
-    const stepX = (width - 2 * padding) / (data.length - 1);
-    const colors = getAccentColors();
-
-    ctx.clearRect(0, 0, width, height);
-    drawAxes(ctx, width, height, padding, maxVal, 5);
-
-    ctx.strokeStyle = colors.stroke;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-
-    const points = data.map((val, i) => {
-      const x = padding + i * stepX;
-      const y = height - padding - (val / maxVal) * (height - 2 * padding);
-      return { x, y, val };
-    });
-
-    for (let i = 0; i < points.length; i++) {
-      const p = i / (points.length - 1);
-      if (p > progress) break;
-
-      if (i === 0) ctx.moveTo(points[i].x, points[i].y);
-      else ctx.lineTo(points[i].x, points[i].y);
+  function stopContinuousUpdate(section) {
+    const key = section?.dataset.content;
+    if (updateIntervals.has(key)) {
+      clearInterval(updateIntervals.get(key));
+      updateIntervals.delete(key);
     }
-    ctx.stroke();
-
-    points.forEach((point, i) => {
-      if ((i / (points.length - 1)) <= progress) {
-        ctx.fillStyle = colors.fill;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Label and value
-        ctx.fillStyle = colors.text;
-        ctx.fillText(labels[i], point.x - 5, height - padding + 15);
-        if (progress > 0.95) {
-          ctx.fillText(point.val, point.x - 5, point.y - 10);
-        }
-      }
-    });
   }
 
-  function animateChart(type, data, labels, duration = 800) {
-    const start = performance.now();
+  // =============================================================
+  //  Lógica para vista de consola
+  // =============================================================
 
-    function animate(now) {
-      const elapsed = now - start;
-      const progress = Math.min(elapsed / duration, 1);
-
-      if (type === 'bar') {
-        drawBarChart(ctx, data, labels, progress);
-      }else{
-        drawLineChart(ctx, data, labels, progress);
-      }
-
-      if (progress < 1) requestAnimationFrame(animate);
-    }
-
-    requestAnimationFrame(animate);
-  }
-
-  function renderChart(type, data, labels) {
-    chartType = type;
-    canvas.dataset.type = type;
-    animateChart(type, data, labels);
-  }
-
-  // Datos iniciales
-  let chartData = [12, 25, 9, 16, 30, 21];
-  let chartLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
-
-  renderChart(chartType, chartData, chartLabels);
-
-
-  const output = document.getElementById('console-output');
+  const console_output = document.getElementById('console-output');
   let autoscroll = true;
   let autoscrollTimeout;
 
   // Detectar si el usuario ha hecho scroll manual
-  output.addEventListener('scroll', () => {
-    const nearBottom = output.scrollHeight - output.scrollTop <= output.clientHeight + 20;
+  console_output.addEventListener('scroll', () => {
+    const nearBottom = console_output.scrollHeight - console_output.scrollTop <= console_output.clientHeight + 20;
 
     if (!nearBottom) {
       autoscroll = false;
@@ -201,148 +157,275 @@ document.addEventListener('DOMContentLoaded', () => {
 
       autoscrollTimeout = setTimeout(() => {
         autoscroll = true;
-      }, 60000); // 60 segundos sin tocar el scroll -> reactivar autoscroll
+      }, 60000); // 60 segundos sin tocar el scroll, reactivar autoscroll
     } else {
       autoscroll = true;
       if (autoscrollTimeout) clearTimeout(autoscrollTimeout);
     }
   });
 
-  async function fetchConsole() {
-    const consoleTab = document.querySelector('button[data-tab="console-view"]');
-    
-    // Solo ejecutar si la pestaña está activa
-    if (!consoleTab || !consoleTab.classList.contains('active')) return;
+  // =============================================================
+  //  Lógica para selector de instancia y status del servidor
+  // =============================================================
 
-    try {
-      const res = await fetch('/api/console', { method: 'REPORT' });
-      if (res.status === 401) {
-        window.location.href = '/'; // Redirige al login o página principal
-      }
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      const data = await res.text();
-      output.textContent = data;
-    } catch (err) {
-      output.textContent += `\n[Error] ${err.message}`;
+  instanceSelector.addEventListener('change', () => {
+    selectedInstance = instanceSelector.value;
+    let isSelected = false;
+    if(selectedInstance != null && selectedInstance != undefined && typeof(selectedInstance) == "string" && selectedInstance != "") {
+      isSelected = true;
     }
-    if (autoscroll) {
-      output.scrollTop = output.scrollHeight; // Auto-scroll al final
+    if (!isSelected) {
+      generalStatus.classList.remove('hidden');
+      instanceStatus.classList.add('hidden');
+      instanceSelector.innerHTML = '<option value="">'+ selectorSelectText +'</option>';
+      instancesList.forEach(server => {
+        const option = document.createElement('option');
+        option.value = server;
+        option.textContent = server;
+        instanceSelector.appendChild(option);
+      });
+      return;
+    }
+
+    generalStatus.classList.add('hidden');
+    const instanceNameSpan = document.querySelector('[data-instance-name]');
+    instanceStatus.classList.remove('hidden');
+    instanceSelector.innerHTML = '<option value="">'+ selectorStatusText +'</option>';
+    instancesList.forEach(server => {
+      const option = document.createElement('option');
+      option.value = server;
+      option.textContent = server;
+      instanceSelector.appendChild(option);
+    });
+
+    // Restaurar selección
+    instanceSelector.value = selectedInstance;
+    instanceNameSpan.textContent = selectedInstance;
+
+    fetchInstanceData(selectedInstance);
+  });
+
+  function updateInstanceStatus(data) {
+    const statusText = document.querySelector('[data-key="status"]');
+    const statusDot = document.querySelector('[data-key="instance_status_dot"]');
+
+    const statusMap = {
+      running: { color: "green", label: "Activo" },
+      starting: { color: "orange", label: "Iniciando" },
+      stopped: { color: "red", label: "Detenido" }
+    };
+
+    const current = statusMap[data.status] || { color: "gray", label: "Desconocido" };
+
+    // Actualizar texto
+    if (statusText) statusText.textContent = current.label;
+
+    // Limpiar clases y aplicar color
+    if (statusDot) {
+      statusDot.className = `status-dot ${current.color}`;
+    }
+    const mapping = {
+      backup: data.backup ?? "-",
+      complete: data.complete ?? "-",
+      cpu: data.cpu ?? "-",
+      has_jar: data.has_jar ?? "-",
+      has_run: data.has_run ?? "-",
+      name: data.name ?? "-",
+      player_count: data.player_count ?? "-",
+      ram_used: formatMemory(data.ram_used) ?? "-",
+      status: data.status ?? "-",      
+    };
+
+    for (const key in mapping) {
+      const txt = document.querySelector(`[data-key="${key}"]`);
+      if (txt) txt.textContent = mapping[key];
     }
   }
 
-  // Actualiza cada 2 segundos solo si la pestaña "Consola" está activa
-  setInterval(fetchConsole, 2000);
-  fetchConsole();
+  function updateGeneralStatus(data) {
+    const mapping = {
+      instance_count: data.status?.total ?? "-",
+      instances_actives: data.status?.running ?? "-",
+      general_ram_used: formatMemory(data.status.ram_used) ?? "-",
+      general_player_count: data.status.player_count ?? "-"
+    };
 
-  // Botón: Cambiar tipo de gráfico
-  document.getElementById('toggleChartType').addEventListener('click', () => {
-    chartType = chartType === 'bar' ? 'line' : 'bar';
-    document.getElementById('toggleChartType').textContent = chartType === 'bar'
-      ? 'Cambiar a Línea'
-      : 'Cambiar a Barras';
-
-    renderChart(chartType, chartData, chartLabels);
-  });
-
-  // Botón: Actualizar gráfico desde endpoint
-  document.getElementById('refreshChart').addEventListener('click', async (e) => {
-    const endpoint = e.target.dataset.endpoint;
-    try {
-      const res = await fetch(endpoint);
-      if (res.status === 401) {
-        return window.location.href = '/'; // Redirige al login o página principal
-      }
-      const json = await res.json();
-
-      // Se espera que json tenga: { values: [..], labels: [..] }
-      chartData = json.values;
-      chartLabels = json.labels;
-
-      renderChart(chartType, chartData, chartLabels);
-    } catch (error) {
-      console.error('Error al actualizar gráfico:', error);
+    for (const key in mapping) {
+      const txt = document.querySelector(`[data-key="${key}"]`);
+      if (txt) txt.textContent = mapping[key];
     }
-  });
+  }
+
+  function populateInstanceSelector(data) {
+    let isSelected = false;
+    if(selectedInstance != null && selectedInstance != undefined && typeof(selectedInstance) == "string" ) {
+      isSelected = true;
+    }
+    if(!isSelected){
+      instanceSelector.innerHTML = '<option value="">'+ selectorSelectText +'</option>';
+    } else {
+      instanceSelector.innerHTML = '<option value="">'+ selectorStatusText +'</option>';
+    }
+    instancesList = data.servers ? data.servers : instancesList;
+    instancesList.forEach(server => {
+      const option = document.createElement('option');
+      option.value = server;
+      option.textContent = server;
+      instanceSelector.appendChild(option);
+    });
+    
+      if(isSelected) instanceSelector.value = selectedInstance;
+  }
+
+  async function fetchJSON(endpoint, method, payload="") {
+    const res = await fetch(endpoint, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401) {
+      window.location.href = '/';
+    }
+
+    if (res.status === 500) {
+      throw new Error(`Error HTTP ${res.status}`);
+    }
+
+    return await res.json();
+  }
+
+  // =============================================================
+  // --- Funciones específicas de cada fetch
+  // =============================================================
+  async function fetchStatus(section) {
+
+    const endpoint = section.dataset.endpoint;
+    const method = section.dataset.method;
+
+    try {
+      const data = await fetchJSON(endpoint, method);
+      populateInstanceSelector(data);
+      updateGeneralStatus(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function fetchInstanceData(instance) {
+
+    const endpoint = instanceSelector.dataset.endpoint;
+    const method = instanceSelector.dataset.method;
+    const payload = { "name":instance }
+
+    try {
+      const data = await fetchJSON(endpoint, method, payload);
+      updateInstanceStatus(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function fetchConsole(section) {
+    const consoleTab = document.querySelector('button[data-tab="console-view"]');
+    // const output = document.querySelector('button[data-tab="console-view"]');
+    if (!consoleTab || !consoleTab.classList.contains('active')) return;
+    const endpoint = section.dataset.endpoint;
+    const method = section.dataset.method;
+    const payload = {"name": selectedInstance};
+    try {
+      const res = await fetchJSON(endpoint, method, payload);
+      if (!res.success) {
+        showAlert(res.message, "error");
+      }else{
+        console_output.textContent += res.console;
+      }
+    } catch (err) {
+      console_output.textContent += `\n[Error] ${err.message}`;
+    }
+    if (autoscroll) {
+      console_output.scrollTop = console_output.scrollHeight;
+    }
+  }
+
+  // =============================================================
+  // Forzar actualización inicial en primera carga
+  // =============================================================
+  const initialSection = document.querySelector('.content.active');
+  if (initialSection) {
+    const updateType = initialSection.dataset.update;
+    if (updateType === 'on-activate') {
+      updateContent(initialSection);
+    } else if (updateType === 'continuous') {
+      startContinuousUpdate(initialSection);
+    }
+  }
+
 
   // =============================================================
   //  LÓGICA PARA LOS BOTONES DEL MENÚ PRINCIPAL (div.menu-buttons)
   // =============================================================
-  const menuContainer = document.querySelector('.menu-buttons');
-  if (menuContainer) {
-    menuContainer.addEventListener('click', async (e) => {
-      // Si no clicamos un <button>, salimos
-      if (e.target.tagName !== 'BUTTON') return;
+  // const menuContainer = document.querySelector('.menu-buttons');
+  // if (menuContainer) {
+  //   menuContainer.addEventListener('click', async (e) => {
+  //     // Si no clicamos un <button>, salimos
+  //     if (e.target.tagName !== 'BUTTON') return;
 
-      const btn = e.target;
-      const action = btn.dataset.action; // por ejemplo: "start-server", "edit-config", etc.
-      try {
-        switch (action) {
-          case 'start-server':
-            const res = await fetch('/api/start-server', { method: 'POST' });
-            if (res.status === 401) {
-              window.location.href = '/'; // Redirige al login o página principal
-            }
-            alert('Solicitud de inicio enviada.');
-            break;
+  //     const btn = e.target;
+  //     const action = btn.dataset.action; // por ejemplo: "start-server", "edit-config", etc.
+  //     try {
+  //       switch (action) {
+  //         case 'start-server':
+  //           const res = await fetch('/api/start-server', { method: 'POST' });
+  //           if (res.status === 401) {
+  //             window.location.href = '/'; // Redirige al login o página principal
+  //           }
+  //           alert('Solicitud de inicio enviada.');
+  //           break;
 
-          case 'stop-server':
-            res = await fetch('/api/stop-server', { method: 'POST' });
-            if (res.status === 401) {
-              window.location.href = '/'; // Redirige al login o página principal
-            }
-            alert('Solicitud de detención enviada.');
-            break;
+  //         case 'stop-server':
+  //           res = await fetch('/api/stop-server', { method: 'POST' });
+  //           if (res.status === 401) {
+  //             window.location.href = '/'; // Redirige al login o página principal
+  //           }
+  //           alert('Solicitud de detención enviada.');
+  //           break;
 
-          case 'restart-server':
-            res = await fetch('/api/restart-server', { method: 'POST' });
-            if (res.status === 401) {
-              window.location.href = '/'; // Redirige al login o página principal
-            }
-            alert('Solicitud de reinicio enviada.');
-            break;
+  //         case 'restart-server':
+  //           res = await fetch('/api/restart-server', { method: 'POST' });
+  //           if (res.status === 401) {
+  //             window.location.href = '/'; // Redirige al login o página principal
+  //           }
+  //           alert('Solicitud de reinicio enviada.');
+  //           break;
 
-          case 'edit-config':
-            // redirigir a tu vista de edición
-            window.location.href = '/panel/edit-config';
-            break;
+  //         case 'edit-config':
+  //           // redirigir a tu vista de edición
+  //           window.location.href = '/panel/edit-config';
+  //           break;
 
-          case 'performance-monitor':
-            window.location.href = '/panel/performance';
-            break;
+  //         case 'performance-monitor':
+  //           window.location.href = '/panel/performance';
+  //           break;
 
-          case 'view-logs':
-            window.location.href = '/panel/logs';
-            break;
+  //         case 'view-logs':
+  //           window.location.href = '/panel/logs';
+  //           break;
 
-          // Los botones sin data-action (p.ej. id="openPlayerMgmt", etc.) 
-          // no tienen acción aquí; su listener abre un diálogo directamente.
-          default:
-            break;
-        }
-      } catch (err) {
-        console.error('Error en menú principal:', err);
-        alert('Error al ejecutar la acción: ' + (btn.textContent || action));
-      }
-    });
-  }
-
-  // const viewportInfo = document.getElementById('viewport-info');
-
-  // function updateViewportSize() {
-  //   const width = window.innerWidth;
-  //   const height = window.innerHeight;
-  //   viewportInfo.textContent = `Viewport: ${width} x ${height}`;
+  //         default:
+  //           break;
+  //       }
+  //     } catch (err) {
+  //       console.error('Error en menú principal:', err);
+  //       alert('Error al ejecutar la acción: ' + (btn.textContent || action));
+  //     }
+  //   });
   // }
-
-  // // Inicializar
-  // updateViewportSize();
-
-  // // Actualizar al cambiar tamaño
-  // window.addEventListener('resize', updateViewportSize);
 
 
   /* ===========================================================
-     2) GESTIÓN DE DIÁLOGOS (Modales)
+     2) GESTIÓN DE DIÁLOGOS
      =========================================================== */
   const dialogs = {
     quick: document.getElementById('quickCommandsDialog'),
@@ -395,6 +478,9 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: cmd })
       });
+      if (res.status === 401) {
+            window.location.href = '/';
+          }
       alert('Comando enviado: ' + cmd);
     } catch (err) {
       console.error(err);
@@ -409,7 +495,6 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', async () => {
       const endpoint = btn.dataset.endpoint;
       try {
-        // Si la acción requiere parámetro extra (por ejemplo,nombre usuario a kickear), preguntar aquí
         if (endpoint.endsWith('/player/kick')) {
           const nombre = prompt('Ingresa nombre de jugador:');
           if (!nombre) return;
@@ -419,12 +504,11 @@ document.addEventListener('DOMContentLoaded', () => {
             body: JSON.stringify({ player: nombre })
           });
           if (res.status === 401) {
-            window.location.href = '/'; // Redirige al login o página principal
+            window.location.href = '/';
           }
           alert(`Kick de ${nombre} enviado.`);
         }
         else {
-          // Para la mayoría, alcanza con POST sin cuerpo adicional
           await fetch(endpoint, { method: 'POST' });
           alert('Comando enviado: ' + btn.textContent.trim());
         }
@@ -434,7 +518,6 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Error al ejecutar: ' + btn.textContent.trim());
       }
       finally {
-        // Cierra el modal que contenga este botón
         btn.closest('dialog')?.close();
       }
     });
@@ -442,111 +525,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // ===========================================================
-  //  Status Server Instances
+  //  Server Instances actions
   // ===========================================================
-  const container = document.getElementById("instancesContainer");
-  const infoContainer = document.querySelector('[data-bind="server-info"]');
-  const nameDisplay = document.querySelector('[data-instance-name]');
-  let instances = {};
-  let selectedId = null;
 
-  async function loadInstances(endpoint) {
-    try {
-      const res = await fetch(endpoint);
-      const data = await res.json();
-      instances = {};
-      container.innerHTML = "";
-
-      data.forEach(item => {
-        instances[item.id] = item;
-
-        const card = document.createElement("div");
-        card.classList.add("instance-card");
-        card.dataset.id = item.id;
-        card.dataset.screenName = item.screen_name;
-        card.dataset.serverPath = item.server_path;
-        card.dataset.status = item.status;
-        card.dataset.ramUsed = item.ram_used;
-        card.dataset.playerCount = item.player_count;
-        card.dataset.backupPath = item.backup_path;
-
-        card.innerHTML = `
-          <p><strong>${item.screen_name}</strong></p>
-          <p>Estado: ${item.status}</p>
-          <p>Jugadores: ${item.player_count}</p>
-        `;
-
-        card.addEventListener("click", () => {
-          selectInstance(item.id);
-        });
-
-        container.appendChild(card);
-      });
-
-      if (data.length > 0) {
-        selectInstance(data[0].id);
-      }
-    } catch (err) {
-      console.error("Error cargando instancias:", err);
-    }
-  }
-
-  function selectInstance(id) {
-    if (selectedId === id) return; // No cambia
-
-    selectedId = id;
-
-    // Actualizar selección visual
-    container.querySelectorAll(".instance-card").forEach(card => {
-      card.classList.toggle("selected", card.dataset.id === id);
-    });
-
-    const data = instances[id];
-    if (!data) return;
-
-    // Actualizar info detallada
-    infoContainer.querySelectorAll("[data-key]").forEach(el => {
-      const key = el.dataset.key;
-      let val = data[toCamelCase(key)] ?? data[key] ?? "-";
-
-      if (key === "player_count") val = `${val} conectados`;
-      if (key === "backup_path") val = val || "No configurado";
-
-      el.textContent = val;
-    });
-
-    // Actualizar header
-    if (nameDisplay) {
-      nameDisplay.textContent = data.screen_name;
-    }
-  }
-
-  // Convierte snake_case o lowercase a camelCase para asegurar acceso a propiedades JS
-  function toCamelCase(str) {
-    return str.replace(/_([a-z])/g, g => g[1].toUpperCase());
-  }
-
-  // Botones de acción
   document.querySelectorAll("button[data-action]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      if (!selectedId) {
+      if (!selectedInstance) {
         alert("Selecciona una instancia primero.");
         return;
       }
-      const action = btn.dataset.action;
-      let endpoint = btn.dataset.endpoint.replace("{id}", selectedId);
+      const action = btn.dataset.action
+      const method = btn.dataset.method;
+      const endpoint = btn.dataset.endpoint;
+      const payload = { name: selectedInstance };
 
       try {
-        const res = await fetch(endpoint, {
-          method: action === "refresh" ? "GET" : "POST",
-        });
-        if (!res.ok) throw new Error();
-
-        if (action === "refresh") {
-          await loadInstances(container.dataset.endpoint);
+        if (action=="refresh") {
+          fetchInstanceData(selectedInstance);
         } else {
-          alert(`Acción '${action}' ejecutada correctamente`);
+          const res = await fetchJSON(endpoint, method, payload);
+          if (res.status === 401) {
+            window.location.href = '/';
+          }
+          if (res.success) {
+            fetchInstanceData(selectedInstance);
+            showAlert(`Acción '${action}' ejecutada correctamente`, "success");
+          } else {
+            showAlert(`Acción '${action}' no ejecutada`, "error");
+          }
         }
+        
       } catch (err) {
         alert(`Error ejecutando '${action}'`);
         console.error(err);
@@ -554,85 +562,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Auto cargar
-  if (container.dataset.autoLoad === "true") {
-    loadInstances(container.dataset.endpoint);
-  }
-  // const selector = document.getElementById("instanceSelector");
-  // const infoContainer = document.querySelector('[data-bind="server-info"]');
-  // const nameDisplay = document.querySelector('[data-instance-name]');
-  // let instances = {};
+  document.querySelectorAll("button[data-gen]").forEach(btn => {
+    btn.addEventListener("click", async () => {
 
-  // async function loadInstances(endpoint) {
-  //   try {
-  //     const res = await fetch(endpoint);
-  //     const data = await res.json();
-  //     const idField = selector.dataset.fieldId || "id";
-  //     const labelField = selector.dataset.fieldLabel || "screen_name";
-  //     selector.innerHTML = "";
+      const action = btn.dataset.action
+      const method = btn.dataset.method;
+      const endpoint = btn.dataset.endpoint;
 
-  //     data.forEach(item => {
-  //       instances[item[idField]] = item;
-
-  //       const option = document.createElement("option");
-  //       option.value = item[idField];
-  //       option.textContent = item[labelField];
-  //       selector.appendChild(option);
-  //     });
-
-  //     if (data.length > 0) updateInfo(data[0][idField]);
-  //   } catch (err) {
-  //     console.error("Error al cargar instancias:", err);
-  //   }
-  // }
-
-  // function updateInfo(id) {
-  //   const data = instances[id];
-  //   if (!data) return;
-
-  //   infoContainer.querySelectorAll("[data-key]").forEach(el => {
-  //     const key = el.dataset.key;
-  //     let val = data[key];
-  //     if (key === "player_count") val = `${val} conectados`;
-  //     if (key === "backup_path") val = val || "No configurado";
-  //     el.textContent = val;
-  //   });
-
-  //   selector.dataset.activeId = id;
-  //   if (nameDisplay) nameDisplay.textContent = data.screen_name;
-  // }
-
-  // selector.addEventListener("change", () => {
-  //   updateInfo(selector.value);
-  // });
-
-  // document.querySelectorAll("button[data-action]").forEach(btn => {
-  //   btn.addEventListener("click", async () => {
-  //     const id = selector.dataset.activeId;
-  //     const endpoint = btn.dataset.endpoint.replace("{id}", id);
-  //     const action = btn.dataset.action;
-
-  //     try {
-  //       const res = await fetch(endpoint, {
-  //         method: action === "refresh" ? "GET" : "POST"
-  //       });
-  //       if (!res.ok) throw new Error();
-
-  //       if (action === "refresh") {
-  //         await loadInstances(selector.dataset.endpoint);
-  //       } else {
-  //         alert(`Acción '${action}' ejecutada correctamente`);
-  //       }
-  //     } catch (err) {
-  //       alert(`Error ejecutando '${action}'`);
-  //       console.error(err);
-  //     }
-  //   });
-  // });
-
-  // if (selector.dataset.autoLoad === "true") {
-  //   loadInstances(selector.dataset.endpoint);
-  // }
+      try {
+          const res = await fetchJSON(endpoint, method);
+          if (res.status === 401) {
+            window.location.href = '/';
+          }
+          if (res.success) {
+            fetchInstanceData(selectedInstance);
+            showAlert(`Acción '${action}' ejecutada correctamente`, "success");
+          } else {
+            showAlert(`Acción '${action}' no ejecutada`, "error");
+          }
+      } catch (err) {
+        alert(`Error ejecutando '${action}'`);
+        console.error(err);
+      }
+    });
+  });
 
   // ===========================================================
   //  CERRAR DIÁLOGOS
