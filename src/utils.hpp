@@ -2,7 +2,6 @@
 #define UTILS_HPP
 
 #include <unordered_map>
-#include <string>
 #include <algorithm>
 #include <cctype>
 #include <fstream>
@@ -11,16 +10,62 @@
 #include <iostream>
 #include <cstring>
 #include <filesystem>
-#include <sqlite3.h>
 #include <unistd.h>
 #include <pwd.h>
 #include <vector>
+#include <regex>
+#include <cmath>
 
-// #include "debug_log.hpp"
-// #include "config.hpp"
 
-static constexpr size_t MAX_INSTANCES = 4;
+// ========================
+// Regex para lectura de resultados de consola
+// ========================
+static inline std::regex regex_confirm_termination(R"(:~$|jaime)", std::regex::icase);
+static inline std::regex regex_test_inicialization(R"(Deftones|btop|strapicarus)", std::regex::icase);
+static inline std::vector<std::regex> regex_count_patterns = {
+    std::regex(R"(There are (\d+) of a max of \d+ players online)", std::regex::icase),
+    std::regex(R"(Hay (\d+) de un máximo de \d+ jugadores conectados)", std::regex::icase)
+};
+static inline std::vector<std::regex> regex_weather_patterns = {
+    std::regex(R"(clear|rain|thunder)", std::regex::icase),
+    std::regex(R"(despejado|lluvia|tormenta)", std::regex::icase)
+};
+static inline std::vector<std::regex> regex_list_patterns = {
+    std::regex(R"(Players online:\s*(.*))", std::regex::icase),
+    std::regex(R"(Jugadores conectados:\s*(.*))", std::regex::icase)
+};
+static inline std::vector<std::regex> regex_seed_patterns = {
+    std::regex(R"(Seed: \[(-?\d+)\])", std::regex::icase),
+    std::regex(R"(Semilla: \[(-?\d+)\])", std::regex::icase)
+};
+static inline std::vector<std::regex> regex_time_patterns = {
+    std::regex(R"(The time is (\d+))", std::regex::icase),
+    std::regex(R"(La hora es (\d+))", std::regex::icase)
+};
+static inline std::vector<std::regex> regex_difficulty_patterns = {
+    std::regex(R"(The difficulty is (\w+))", std::regex::icase),   
+    std::regex(R"(La dificultad es (\w+))", std::regex::icase)     
+};
+static inline std::vector<std::regex> regex_border_patterns = {
+    std::regex(R"(The world border is currently (\d+(?:\.\d+)?) block\(s\) wide)", std::regex::icase),
+    std::regex(R"(El borde del mundo actualmente mide (\d+(?:\.\d+)?) bloque(?:s)? de ancho)", std::regex::icase),
+    std::regex(R"(The world border is currently (\d+(?:\.\d+)?) blocks? wide)", std::regex::icase),
+    std::regex(R"(El límite mundial está actualmente en (\d+(?:\.\d+)?) bloques? de ancho)", std::regex::icase),
+    std::regex(R"(World border is currently (\d+(?:\.\d+)?) blocks? wide)", std::regex::icase),
+    std::regex(R"(Limite del mundo es (\d+(?:\.\d+)?) bloques? ancho)", std::regex::icase)
+};
 
+
+// ========================
+// Entidades comunes
+// ========================
+static inline std::vector<std::string> animals = {"cow", "pig", "sheep", "chicken", "horse", "donkey", "mule", "llama"};
+static inline std::vector<std::string> monsters = {"zombie", "skeleton", "creeper", "spider", "enderman", "witch"};
+
+
+// ========================
+// Configuraciñon
+// ========================
 struct alignas(16) GlobalConfig {
 
 #ifdef DEV
@@ -50,7 +95,17 @@ inline GlobalConfig config;
 
 inline std::ofstream log_file;
 
-static void debug_log_internal(const std::string& msg, const char* file, int line, const char* func) {
+struct PluginInfo {
+    std::string name;
+    double size_mb;
+};
+
+struct ModInfo {
+    std::string name;
+    double size_mb;
+};
+
+static inline void debug_log_internal(const std::string& msg, const char* file, int line, const char* func) {
     const std::string full = "[DEBUG] " + std::string(file) + ":" + std::to_string(line) + " (" + func + ") - " + msg;
 
     if (config.debug_mode)
@@ -64,7 +119,7 @@ static void debug_log_internal(const std::string& msg, const char* file, int lin
 
 #define debug_log(msg) debug_log_internal((msg), __FILE__, __LINE__, __func__)
 
-inline void trim(std::string& s) {
+static inline void trim_header_line(std::string& s) {
     const char* ws = " \t\r\n";
     const auto start = s.find_first_not_of(ws);
     if (start == std::string::npos) {
@@ -76,18 +131,24 @@ inline void trim(std::string& s) {
     s.erase(0, start);
 }
 
-inline std::string to_lower(std::string s) {
+static inline std::string trim_string(const std::string& str) {
+    size_t start = str.find_first_not_of(" \n\r\t");
+    size_t end = str.find_last_not_of(" \n\r\t");
+    return (start == std::string::npos) ? "" : str.substr(start, end - start + 1);
+}
+
+static inline std::string to_lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     return s;
 }
 
-inline std::string replace_spaces_with_underscore(std::string str) {
+static inline std::string replace_spaces_with_underscore(std::string str) {
     std::replace(str.begin(), str.end(), ' ', '_');
     return str;
 }
 
-inline std::string sanitize_string(std::string str) {
+static inline std::string sanitize_string(std::string str) {
     const std::string forbidden_chars = " -,'\".:;/\\+*&%·#$|@=?!`ç´{}[]";
 
     std::replace_if(str.begin(), str.end(),
@@ -99,11 +160,11 @@ inline std::string sanitize_string(std::string str) {
     return str;
 }
 
-inline bool has_dot(const std::string& str) {
+static inline bool has_dot(const std::string& str) {
     return str.find('.') != std::string::npos;
 }
 
-inline std::string get_mime_type(const std::string& path) {
+static inline std::string get_mime_type(const std::string& path) {
     if(!has_dot(path)) return "Error";
     // const std::string path = to_lower(trim_copy(raw_path));
     if (path.ends_with(".html") || path.ends_with(".htm")) return "text/html";
@@ -130,7 +191,7 @@ inline std::string get_mime_type(const std::string& path) {
     return "Error";
 }
 
-inline std::vector<std::string> split(const std::string& str, char delim) {
+static inline std::vector<std::string> split(const std::string& str, char delim) {
     std::vector<std::string> parts;
     std::istringstream iss(str);
     std::string s;
@@ -139,7 +200,7 @@ inline std::vector<std::string> split(const std::string& str, char delim) {
     return parts;
 }
 
-inline std::string normalize_servers_path(const GlobalConfig& conf) {
+static inline std::string normalize_servers_path(const GlobalConfig& conf) {
     // Si la ruta ya es absoluta, no hay nada que hacer
     if (conf.servers_path[0] == '/') {
         return std::string(conf.servers_path); 
@@ -155,7 +216,7 @@ inline std::string normalize_servers_path(const GlobalConfig& conf) {
     return full_path;
 }
 
-inline std::string get_base_path(const GlobalConfig& conf) {
+static inline std::string get_base_path(const GlobalConfig& conf) {
     const char* home = getenv("HOME");
     if (!home) {
         home = getpwuid(getuid())->pw_dir;
@@ -176,39 +237,39 @@ inline std::string get_base_path(const GlobalConfig& conf) {
     return app_path;
 }
 
-inline std::string get_db_path() {
-    return get_base_path(config) + "/data/";
+static inline std::string get_db_path() {
+    return get_base_path(config) + "/data";
 }
 
-inline std::string get_db_file() {
+static inline std::string get_db_file() {
     return get_base_path(config) + "/data/" + config.db_name;
 }
 
-inline std::string get_public_path() {
+static inline std::string get_public_path() {
     return get_base_path(config) + "/public";
 }
 
-inline std::string get_log_path() {
+static inline std::string get_log_path() {
     return get_base_path(config) + "/log/";
 }
 
-inline std::string get_log_file() {
+static inline std::string get_log_file() {
     return get_base_path(config) + "/log/" + config.log_file;
 }
 
-inline std::string get_config_path() {
+static inline std::string get_config_path() {
     return get_base_path(config) + "/config/" ;
 }
 
-inline std::string get_config_file() {
+static inline std::string get_config_file() {
     return get_base_path(config) + "/config/" + config.config_file ;
 }
 
-inline std::string get_servers_path() {
+static inline std::string get_servers_path() {
     return normalize_servers_path(config);
 }
 
-inline void set_path(char* dest, std::size_t max_len, const char* path, const char* label) {
+static inline void set_path(char* dest, std::size_t max_len, const char* path, const char* label) {
     int written = std::snprintf(dest, max_len, "%s", path);
 
     if (written < 0) {
@@ -220,7 +281,33 @@ inline void set_path(char* dest, std::size_t max_len, const char* path, const ch
     }
 }
 
-inline void load_or_create_config(GlobalConfig& conf) {
+static inline std::string get_file_op(const std::string& path) {
+    std::ifstream infile(path, std::ios::in | std::ios::binary);
+    if (!infile.is_open()) {
+        throw std::runtime_error("Error: No se pudo abrir el archivo: " + path);
+    }
+
+    infile.seekg(0, std::ios::end);
+    std::streamsize file_size = infile.tellg();
+    if (file_size < 0) {
+        throw std::runtime_error("Error: No se pudo determinar el tamaño del archivo.");
+    }
+
+    if (static_cast<std::size_t>(file_size) > std::numeric_limits<std::size_t>::max()) {
+        throw std::runtime_error("Error: archivo demasiado grande para ser leído en memoria.");
+    }
+
+    infile.seekg(0, std::ios::beg);
+
+    std::string content(static_cast<std::size_t>(file_size), '\0');
+    if (!infile.read(content.data(), file_size)) {
+        throw std::runtime_error("Error: No se pudo leer el contenido completo del archivo.");
+    }
+
+    return content;
+}
+
+static inline void load_or_create_config(GlobalConfig& conf) {
 
     std::filesystem::create_directories(get_base_path(conf));
     std::filesystem::create_directories(get_db_path());
@@ -347,6 +434,58 @@ inline void load_or_create_config(GlobalConfig& conf) {
     }
 
     debug_log("Archivo de configuración cargado...");
+}
+
+static inline std::vector<PluginInfo> get_installed_plugins(const std::string& plugin_dir_path) {
+    std::vector<PluginInfo> plugins;
+
+    std::filesystem::path plugin_dir(plugin_dir_path);
+
+    if (!std::filesystem::exists(plugin_dir)) {
+        throw std::runtime_error("Directorio no existe: " + plugin_dir_path);
+    }
+
+    if (!std::filesystem::is_directory(plugin_dir)) {
+        throw std::runtime_error("Path no es un directorio: " + plugin_dir_path);
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(plugin_dir)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".jar") {
+            std::string file_name = entry.path().filename().string();
+            std::uintmax_t size_bytes = entry.file_size();
+            double size_mb = std::round((static_cast<double>(size_bytes) / (1024.0 * 1024.0)) * 100.0) / 100.0;
+
+            plugins.push_back(PluginInfo{file_name, size_mb});
+        }
+    }
+
+    return plugins;
+}
+
+static inline std::vector<ModInfo> get_installed_mods(const std::string& mods_dir_path) {
+    std::vector<ModInfo> mods;
+
+    std::filesystem::path mods_dir(mods_dir_path);
+
+    if (!std::filesystem::exists(mods_dir)) {
+        throw std::runtime_error("Directorio no existe: " + mods_dir_path);
+    }
+
+    if (!std::filesystem::is_directory(mods_dir)) {
+        throw std::runtime_error("Path no es un directorio: " + mods_dir_path);
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(mods_dir)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".jar") {
+            std::string file_name = entry.path().filename().string();
+            std::uintmax_t size_bytes = entry.file_size();
+            double size_mb = std::round((static_cast<double>(size_bytes) / (1024.0 * 1024.0)) * 100.0) / 100.0;
+
+            mods.push_back(ModInfo{file_name, size_mb});
+        }
+    }
+
+    return mods;
 }
 
 #endif // UTILS_HPP

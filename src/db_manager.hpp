@@ -12,18 +12,21 @@
 
 #include "utils.hpp"
 
-extern void add_user(const std::string& username, const std::string& password);
+extern bool add_user(const std::string& username, const std::string& password);
 
 class DBManager {
 public:
-    explicit DBManager(const std::string& db_path) 
-    : db_path(db_path), db(nullptr)
+    explicit DBManager(const std::string db_file) 
+    : db_path(db_file), db(nullptr)
     {
         debug_log("DB: " + db_path);
-        if (sqlite3_open(db_path.c_str(), &db) != SQLITE_OK) {
+        if (sqlite3_open_v2(db_path.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) != SQLITE_OK) {
             debug_log(std::string("Failed to open DB: ") + sqlite3_errmsg(db));
             db = nullptr;
+            throw std::runtime_error("Error al crear el objeto DBManager");
         }
+        const char* real_file = sqlite3_db_filename(db, "main");
+        debug_log("sqlite3: archivo real abierto: " + std::string(real_file ? real_file : "null"));
     }
 
     ~DBManager() {
@@ -31,37 +34,77 @@ public:
             sqlite3_close(db);
         }
     }
+    void m_initialize_database() {
+        // std::string db_path = m_get_db_path();
+        debug_log("inicialización db:" + m_get_db_path());
 
-    // bool m_select(const std::string& sql,
-    //             const std::vector<std::string>& params,
-    //             const std::function<void(sqlite3_stmt*)>& row_callback) {
-    //     std::lock_guard<std::mutex> lock(db_mutex);
-    //     sqlite3_stmt* stmt = nullptr;
+        if (!db) {
+            throw std::runtime_error("No se puede inicializar: la base de datos no está abierta");
+        }
+        debug_log("db: existe");
+        if (m_is_schema_initialized()) {
+            debug_log("Base de datos ya inicializada.");
+            return;
+        }
+        debug_log("m_is_schema_initialized: existe");
+        if (!m_begin_transaction()) {
+            throw std::runtime_error("Error al iniciar la transacción de inicialización");
+        }
 
-    //     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
-    //         log_sqlite_error("Prepare failed");
-    //         return false;
-    //     }
+        debug_log("m_begin_transaction: existe");
+        std::vector<std::string> init_sql = {
+            R"(CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );)",
 
-    //     if (!bind_all(stmt, params)) {
-    //         sqlite3_finalize(stmt);
-    //         return false;
-    //     }
+            R"(CREATE TABLE IF NOT EXISTS tokens (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );)",
 
-    //     while (sqlite3_step(stmt) == SQLITE_ROW) {
-    //         row_callback(stmt);
-    //     }
+            R"(CREATE TABLE IF NOT EXISTS blocked (
+                ip TEXT PRIMARY KEY,
+                blocked_until INTEGER NOT NULL
+            );)",
 
-    //     sqlite3_finalize(stmt);
-    //     return true;
-    // }
+            R"(CREATE INDEX IF NOT EXISTS idx_blocked_until ON blocked(blocked_until);)",
+
+            R"(CREATE TABLE IF NOT EXISTS hits (
+                ip TEXT NOT NULL,
+                timestamp INTEGER NOT NULL
+            );)",
+
+            R"(CREATE INDEX IF NOT EXISTS idx_hits_ip_time ON hits(ip, timestamp);)"
+        };
+
+        for (const auto& sql : init_sql) {
+            if (!m_execute(sql)) {
+                m_rollback_transaction();
+                throw std::runtime_error("Fallo al ejecutar SQL de inicialización");
+            }
+        }
+
+        if (!m_commit_transaction()) {
+            throw std::runtime_error("Error al confirmar transacción");
+        }
+        debug_log("inicialización: finaliza");
+
+
+        if (!add_user("admin", "admin")) debug_log("Error al inicializar usuario admin");
+
+    }
 
     bool m_is_ip_blocked(const std::string& ip) {
         std::lock_guard<std::mutex> lock(db_mutex);
         sqlite3_stmt* stmt = nullptr;
         const char* sql = "SELECT 1 FROM blocked WHERE ip = ? AND blocked_until > ?";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-            return false;
+            throw std::runtime_error("Error al iniciar la transacción de inicialización");
         }
 
         sqlite3_bind_text(stmt, 1, ip.c_str(), -1, SQLITE_TRANSIENT);
@@ -72,67 +115,10 @@ public:
         return blocked;
     }
 
-    void m_initialize_database() {
-        std::string db_path = m_get_db_path();
-        debug_log("inicialización db:" + db_path);
-
-        if (m_is_schema_initialized()) {
-            debug_log("Base de datos ya inicializada.");
-            return;
-        }
-
-        if (!m_begin_transaction()) {
-            std::runtime_error("Error al iniciar la transacción de inicialización");
-        }
-
-        std::vector<std::string> init_sql = {
-            R"(CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            ))",
-
-            R"(CREATE TABLE IF NOT EXISTS tokens (
-                token TEXT PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            ))",
-
-            R"(CREATE TABLE IF NOT EXISTS blocked (
-                ip TEXT PRIMARY KEY,
-                blocked_until INTEGER NOT NULL
-            ))",
-
-            R"(CREATE INDEX IF NOT EXISTS idx_blocked_until ON blocked(blocked_until))",
-
-            R"(CREATE TABLE IF NOT EXISTS hits (
-                ip TEXT NOT NULL,
-                timestamp INTEGER NOT NULL
-            ))",
-
-            R"(CREATE INDEX IF NOT EXISTS idx_hits_ip_time ON hits(ip, timestamp))"
-        };
-
-        for (const auto& sql : init_sql) {
-            if (!m_execute(sql)) {
-                m_rollback_transaction();
-                std::runtime_error("Fallo al ejecutar SQL de inicialización");
-            }
-        }
-
-        if (!m_commit_transaction()) {
-            std::runtime_error("Error al confirmar transacción");
-        }
-
-        add_user("admin", "admin");
-
-    }
-
     std::string m_get_db_path() const {
         return db_path;
     }
+
 
 private:
     std::string db_path;
@@ -152,6 +138,7 @@ private:
     bool m_execute(const std::string& sql, const std::vector<std::string>& params = {}) {
         std::lock_guard<std::mutex> lock(db_mutex);
         sqlite3_stmt* stmt = nullptr;
+        debug_log("m_execute: starting \n" + sql);
 
         if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
             log_sqlite_error("Prepare failed");
@@ -166,6 +153,13 @@ private:
 
         bool success = (sqlite3_step(stmt) == SQLITE_DONE);
         sqlite3_finalize(stmt);
+        // if (sqlite3_step(stmt) != SQLITE_DONE) {
+        //     debug_log("m_execute: Error");
+
+        //     log_sqlite_error(("sqlite3_step falló para SQL: " + sql).c_str());
+        // }
+        std::string f = success ? "true" : "false";
+        debug_log("m_execute: sqlite3_step " + f);
         return success;
     }
 
@@ -174,11 +168,13 @@ private:
         sqlite3_stmt* stmt = nullptr;
 
         if (sqlite3_prepare_v2(db, check_sql, -1, &stmt, nullptr) != SQLITE_OK) {
-            return false;
+            throw std::runtime_error("Error al verificar la inicialización");
         }
 
         bool initialized = (sqlite3_step(stmt) == SQLITE_ROW);
         sqlite3_finalize(stmt);
+        std::string f = initialized ? "true" : "false";
+        debug_log("m_is_schema_initialized: initialized " + f);
         return initialized;
     }
 

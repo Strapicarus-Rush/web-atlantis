@@ -101,7 +101,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const sectionFunctions = {
     fetchStatus,
     fetchInstanceData,
-    fetchConsole
+    fetchConsole,
+    updateStatus
   };
 
   function updateContent(section) {
@@ -125,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (section.classList.contains('active')) {
         updateContent(section);
       }
-    }, 2000);
+    }, 330);
 
     updateIntervals.set(key, interval);
   }
@@ -170,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   instanceSelector.addEventListener('change', () => {
     selectedInstance = instanceSelector.value;
+    const instanceNameSpan = document.querySelector('[data-instance-name]');
     let isSelected = false;
     if(selectedInstance != null && selectedInstance != undefined && typeof(selectedInstance) == "string" && selectedInstance != "") {
       isSelected = true;
@@ -178,6 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
       generalStatus.classList.remove('hidden');
       instanceStatus.classList.add('hidden');
       instanceSelector.innerHTML = '<option value="">'+ selectorSelectText +'</option>';
+      instanceNameSpan.textContent = "-";
       instancesList.forEach(server => {
         const option = document.createElement('option');
         option.value = server;
@@ -188,7 +191,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     generalStatus.classList.add('hidden');
-    const instanceNameSpan = document.querySelector('[data-instance-name]');
     instanceStatus.classList.remove('hidden');
     instanceSelector.innerHTML = '<option value="">'+ selectorStatusText +'</option>';
     instancesList.forEach(server => {
@@ -247,7 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
       instance_count: data.status?.total ?? "-",
       instances_actives: data.status?.running ?? "-",
       general_ram_used: formatMemory(data.status.ram_used) ?? "-",
-      general_player_count: data.status.player_count ?? "-"
+      general_cpu: data.status?.cpu ?? "-",
+      general_player_count: data.status?.player_count ?? "-"
     };
 
     for (const key in mapping) {
@@ -258,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function populateInstanceSelector(data) {
     let isSelected = false;
-    if(selectedInstance != null && selectedInstance != undefined && typeof(selectedInstance) == "string" ) {
+    if(selectedInstance != null && selectedInstance != undefined && typeof(selectedInstance) == "string" && selectedInstance !="") {
       isSelected = true;
     }
     if(!isSelected){
@@ -285,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       body: JSON.stringify(payload),
     });
-    if (res.status === 401) {
+    if (res.status === 401 || res.status === 403) {
       window.location.href = '/';
     }
 
@@ -313,7 +316,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function updateStatus(endpoint, method) {
+    try {
+      const data = await fetchJSON(endpoint, method);
+      populateInstanceSelector(data);
+      updateGeneralStatus(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   async function fetchInstanceData(instance) {
+
+    const endpoint = instanceSelector.dataset.endpoint;
+    const method = instanceSelector.dataset.method;
+    const payload = { "name":instance }
+
+    try {
+      const data = await fetchJSON(endpoint, method, payload);
+      updateInstanceStatus(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function actionInstanceData(instance) {
 
     const endpoint = instanceSelector.dataset.endpoint;
     const method = instanceSelector.dataset.method;
@@ -339,7 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!res.success) {
         showAlert(res.message, "error");
       }else{
-        console_output.textContent += res.console;
+        console_output.textContent = res.console;
       }
     } catch (err) {
       console_output.textContent += `\n[Error] ${err.message}`;
@@ -429,10 +456,10 @@ document.addEventListener('DOMContentLoaded', () => {
      =========================================================== */
   const dialogs = {
     quick: document.getElementById('quickCommandsDialog'),
-    playerMgmt: document.getElementById('playerMgmtDialog'),
-    pluginMgmt: document.getElementById('pluginMgmtDialog'),
-    worldMgmt: document.getElementById('worldMgmtDialog'),
-    backupMgmt: document.getElementById('backupMgmtDialog'),
+    player: document.getElementById('playerDialog'),
+    plugin: document.getElementById('pluginDialog'),
+    world: document.getElementById('worldDialog'),
+    backup: document.getElementById('backupDialog'),
     lightning: document.getElementById('lightningCommandsDialog'),
     itemCmds: document.getElementById('itemCommandsDialog'),
     mobCmds: document.getElementById('mobCommandsDialog'),
@@ -451,17 +478,17 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('openQuickCommands').addEventListener('click', () => {
     dialogs.quick.showModal();
   });
-  document.getElementById('openPlayerMgmt').addEventListener('click', () => {
-    dialogs.playerMgmt.showModal();
+  document.getElementById('openPlayer').addEventListener('click', () => {
+    dialogs.player.showModal();
   });
-  document.getElementById('openPluginMgmt').addEventListener('click', () => {
-    dialogs.pluginMgmt.showModal();
+  document.getElementById('openPlugin').addEventListener('click', () => {
+    dialogs.plugin.showModal();
   });
-  document.getElementById('openWorldMgmt').addEventListener('click', () => {
-    dialogs.worldMgmt.showModal();
+  document.getElementById('openWorld').addEventListener('click', () => {
+    dialogs.world.showModal();
   });
-  document.getElementById('openBackupMgmt').addEventListener('click', () => {
-    dialogs.backupMgmt.showModal();
+  document.getElementById('openBackup').addEventListener('click', () => {
+    dialogs.backup.showModal();
   });
   document.getElementById('openLightningCommands').addEventListener('click', () => {
     dialogs.lightning.showModal();
@@ -478,7 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: cmd })
       });
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
             window.location.href = '/';
           }
       alert('Comando enviado: ' + cmd);
@@ -489,46 +516,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ===========================================================
-  //  ENVÍO DE PETICIONES DESDE CADA BOTÓN .action-btn
-  // ===========================================================
-  document.querySelectorAll('.action-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const endpoint = btn.dataset.endpoint;
-      try {
-        if (endpoint.endsWith('/player/kick')) {
-          const nombre = prompt('Ingresa nombre de jugador:');
-          if (!nombre) return;
-          const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ player: nombre })
-          });
-          if (res.status === 401) {
-            window.location.href = '/';
-          }
-          alert(`Kick de ${nombre} enviado.`);
-        }
-        else {
-          await fetch(endpoint, { method: 'POST' });
-          alert('Comando enviado: ' + btn.textContent.trim());
-        }
-      }
-      catch (err) {
-        console.error('Error en comando', endpoint, err);
-        alert('Error al ejecutar: ' + btn.textContent.trim());
-      }
-      finally {
-        btn.closest('dialog')?.close();
-      }
-    });
-  });
-
-
-  // ===========================================================
   //  Server Instances actions
   // ===========================================================
 
-  document.querySelectorAll("button[data-action]").forEach(btn => {
+  document.querySelectorAll("button[data-instance-action]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!selectedInstance) {
         alert("Selecciona una instancia primero.");
@@ -544,14 +535,15 @@ document.addEventListener('DOMContentLoaded', () => {
           fetchInstanceData(selectedInstance);
         } else {
           const res = await fetchJSON(endpoint, method, payload);
-          if (res.status === 401) {
+          if (res.status === 401 || res.status === 403) {
             window.location.href = '/';
           }
           if (res.success) {
             fetchInstanceData(selectedInstance);
-            showAlert(`Acción '${action}' ejecutada correctamente`, "success");
+            showAlert(res.message, "success");
           } else {
-            showAlert(`Acción '${action}' no ejecutada`, "error");
+            showAlert(res.message, "error");
+            // showAlert(`Acción '${action}' no ejecutada`, "error");
           }
         }
         
@@ -562,26 +554,60 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  document.querySelectorAll("button[data-gen]").forEach(btn => {
+  // ===========================================================
+  //  PLayer Actiones
+  // ===========================================================
+  function incluye(texto, palabras) {
+    return palabras.some(palabra => texto.includes(palabra));
+  }
+  document.querySelectorAll('button[data-action^="data-player-"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const endpoint = btn.dataset.endpoint;
+      const action = btn.dataset.action;
+      let player = "";
+      let reason = "";
+      try {
+        if (incluye(action, ["kick","ban"])) {
+          player = prompt('Ingresa nombre de jugador:');
+          reason = prompt('Ingresa la razón:');
+        }
+        const payload = {name: selectedInstance, player: player, reason: reason};
+        const res = await fetchJSON(endpoint, method, payload);
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = '/';
+        }
+        if (res.success) {
+          showAlert(res.message, "success");
+        } else {
+          showAlert(res.message, "error");
+        }
+      }
+      catch (err) {
+        console.error('Error en comando', endpoint, err);
+        showAlert(err, "error");
+      }
+      finally {
+        btn.closest('dialog')?.close();
+      }
+    });
+  });
+
+  document.querySelectorAll("button[data-unique]").forEach(btn => {
     btn.addEventListener("click", async () => {
 
-      const action = btn.dataset.action
+      const fnName = btn.dataset.function;
+      const fn = sectionFunctions[fnName];
+      if (typeof fn === 'function') {
+       
+      } else {
+        return showAlert(`Función "${fnName}" no está registrada.`, "Error");
+      }
       const method = btn.dataset.method;
       const endpoint = btn.dataset.endpoint;
 
       try {
-          const res = await fetchJSON(endpoint, method);
-          if (res.status === 401) {
-            window.location.href = '/';
-          }
-          if (res.success) {
-            fetchInstanceData(selectedInstance);
-            showAlert(`Acción '${action}' ejecutada correctamente`, "success");
-          } else {
-            showAlert(`Acción '${action}' no ejecutada`, "error");
-          }
+        fn(endpoint, method);
       } catch (err) {
-        alert(`Error ejecutando '${action}'`);
         console.error(err);
       }
     });

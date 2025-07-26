@@ -394,17 +394,18 @@ bool update_user_password(const std::string& username, const std::string& passwo
 //     // close_client(client_sock);
 // }
 
-void add_user(const std::string& username, const std::string& password) {
+bool add_user(const std::string& username, const std::string& password) {
+
     sqlite3* db;
     if (sqlite3_open(get_db_file().c_str(), &db) != SQLITE_OK) {
-        std::runtime_error("No se pudo abrir el archivo db");
+        throw std::runtime_error("No se pudo abrir el archivo db");
     }
 
     const char* sql = "INSERT INTO users (username, password) VALUES (?, ?)";
     sqlite3_stmt* stmt;
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         sqlite3_close(db);
-        std::runtime_error("No se pudo crear el usuario" + username);
+        throw std::runtime_error("No se pudo crear el usuario" + username);
     }
 
     std::string hashed_pass = hash_password(password);
@@ -414,11 +415,13 @@ void add_user(const std::string& username, const std::string& password) {
     bool success = (sqlite3_step(stmt) == SQLITE_DONE);
     if (success) [[likely]]
     {
+        debug_log("DB success?");
         sqlite3_finalize(stmt);
         sqlite3_close(db);
     } else {
-        std::runtime_error("Falló step_result");
+        throw std::runtime_error("Falló step_result");
     }
+    return success;
 }
 
 static AutoRouteRegisterBatch auth_routes({

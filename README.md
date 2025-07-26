@@ -17,6 +17,11 @@ libc6-dev
 libstdc++-dev
 nlohmann json
 
+**for 32bit**
+gcc-multilib
+libc6-dev-i386
+libstdc++-14-dev:i386
+
 
 
 

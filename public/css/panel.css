@@ -348,20 +348,48 @@ dialog .close-dialog:hover {
   background-color: var(--clr-accent1);
 }
 
-#console-output {
+/*#console-output {
   background-color: var(--clr-bg);
   color: var(--clr-text);
   text-align: left;
   border: 1px solid #0f0;
+  border-radius: var(--radius);
   padding: 1em;
   min-height: 80dvh;
-  max-height: 80dvh;
+  max-height: 85dvh;
   max-width: 800px;
   overflow-y: auto;
   white-space: pre-wrap;
   font-size: 0.9em;
   margin:  0 auto;
   display: block;
+}*/
+
+#console-output {
+  background-color: var(--clr-bg);
+  color: var(--clr-text);
+  text-align: left;
+  border: 1px solid #0f0;
+  border-radius: var(--radius);
+  padding: 1em;
+
+  min-height: 80dvh;
+  max-height: 85dvh;
+
+  width: 100%;
+  max-width: 800px;
+
+  font-size: 0.9em;
+  font-family: monospace;
+  line-height: 1.4;
+
+  white-space: pre;           /* respeta saltos/espacios */
+  overflow-x: auto;           /* scroll horizontal si hay líneas largas */
+  overflow-y: auto;
+
+  margin: 0 auto;
+  display: block;
+  box-sizing: border-box;
 }
 
 #instanceSelector {
@@ -482,21 +510,26 @@ dialog .close-dialog:hover {
     display: ruby;
   }
 
-  #console-output {
+  /*#console-output {
     background-color: var(--clr-bg);
     color: var(--clr-text);
     text-align: left;
     border: 1px solid #0f0;
+    border-radius: var(--radius);
     padding: 1em;
     min-height: 80dvh;
-    max-height: 80dvh;
-    max-width: 90dvw;
+    max-height: 85dvh;
+    height: 100%;
+    min-width: 96dvw;
+    width: 100%;
+    max-width: 98dvw;
     overflow-y: auto;
-    white-space: pre-wrap;
-    font-size: 0.9em;
+    overflow-x: auto;
+    white-space: pre;
+    font-size: 0.8em;
     margin:  0 auto;
     display: block;
-  }
+  }*/
 
   #instanceSelector {
     font-size: 1rem;
