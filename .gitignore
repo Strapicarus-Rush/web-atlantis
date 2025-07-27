@@ -13,6 +13,7 @@
 build/
 dist/
 bin/
+config/
 
 # Archivos de base de datos
 *.db

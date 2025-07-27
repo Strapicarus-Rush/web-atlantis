@@ -158,7 +158,7 @@ static inline std::string sanitize_string(std::string str) {
         },
         '_'
     );
-    return to_lower(str);
+    return str;
 }
 
 static inline bool has_dot(const std::string& str) {

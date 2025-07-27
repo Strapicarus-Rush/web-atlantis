@@ -50,16 +50,18 @@ public:
 
     bool check_session_exists() {
         std::string cmd = "tmux has-session -t \"" + session + "\" 2>/dev/null";
+        debug_log("COMMAND: " + cmd);
         int code = std::system(cmd.c_str());
         return (code != -1 && WEXITSTATUS(code) == 0);
     }
 
     bool is_running() {
         if(!send_command("list")) [[unlikely]] {
+            debug_log("List fail");
             return false;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
-        debug_log("is_running");
+
         std::string output;
         try {
             output = read_output();
@@ -74,9 +76,11 @@ public:
         }
         for(auto& pattern : regex_count_patterns){
             if (std::regex_search(output, match, pattern)) {
+                debug_log("List pattern found");
                 return true;
             }
         }
+        debug_log("List pattern not found");
         return false;
     }
 
@@ -108,7 +112,7 @@ public:
 
     std::pair<bool, std::string> start_server() {
         std::string cmd = "";
-        std::string file_to_run = has_jar ? "java -jar server.jar" : "chmod +x run.sh && ./run.sh";
+        std::string file_to_run = has_run ? "chmod +x run.sh && ./run.sh" : "java -jar server.jar";
         std::string message = "El servidor ya está en ejecución";
         if (check_session_exists()) [[unlikely]] {
             if(is_running()){
@@ -118,10 +122,10 @@ public:
                     "\"cd \\\"" + path + "\\\" && " + file_to_run + "\"";
             }
         }else{
-            cmd = "tmux new-session -d -s \"" + session + "\" "
-                    "\"cd \\\"" + path + "\\\" && " + file_to_run + "\"";
+            cmd = "tmux new-session -d -s \"" + session + "\" " "\"cd \\\"" + path + "\\\" && " + file_to_run + "\"";
         }
 
+        debug_log("COMMAND: " + cmd);
         int result = std::system(cmd.c_str());
 
         if (result != 0) [[unlikely]] {
@@ -176,6 +180,7 @@ public:
         }
 
         std::string cmd = "tmux send-keys -t \"" + session + "\" " + escape_quotes(command) + " C-m";
+        debug_log("COMMAND: " + cmd);
         int result = std::system(cmd.c_str());
 
         if (result != 0) [[unlikely]] {
@@ -275,7 +280,7 @@ public:
                 debug_log(name + " El Socket de tmux existe, pero el servidor no está en ejecución");
             }
         }else [[unlikely]] {
-            debug_log(name + "Sesión no existe en tmux");
+            debug_log(name + " Sesión no existe en tmux");
         }
     }
 
