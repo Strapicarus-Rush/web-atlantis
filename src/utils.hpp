@@ -24,7 +24,8 @@ static inline std::regex regex_confirm_termination(R"(:~$|jaime)", std::regex::i
 static inline std::regex regex_test_inicialization(R"(Deftones|btop|strapicarus)", std::regex::icase);
 static inline std::vector<std::regex> regex_count_patterns = {
     std::regex(R"(There are (\d+) of a max of \d+ players online)", std::regex::icase),
-    std::regex(R"(Hay (\d+) de un máximo de \d+ jugadores conectados)", std::regex::icase)
+    std::regex(R"(Hay (\d+) de un máximo de \d+ jugadores conectados)", std::regex::icase),
+    std::regex(R"(Hay (\d+) jugadores de un máximo de (\d+) jugadores en linea)", std::regex::icase)
 };
 static inline std::vector<std::regex> regex_weather_patterns = {
     std::regex(R"(clear|rain|thunder)", std::regex::icase),
@@ -157,7 +158,7 @@ static inline std::string sanitize_string(std::string str) {
         },
         '_'
     );
-    return str;
+    return to_lower(str);
 }
 
 static inline bool has_dot(const std::string& str) {
@@ -359,34 +360,34 @@ static inline void load_or_create_config(GlobalConfig& conf) {
     //===================================================================
     //  El archivo de configuración [config_path] se lee.
     //===================================================================
-    std::unordered_map<std::string, std::string> config;
+    std::unordered_map<std::string, std::string> config_file_data;
     std::string line;
     while (std::getline(infile, line)) {
         if (line.empty() || line[0] == '#') { continue; }
         std::istringstream iss(line);
         std::string key, value;
         if (std::getline(iss, key, '=') && std::getline(iss, value)) {
-            config[key] = value;
+            config_file_data[key] = value;
         }
     }
 
     //===================================================================
     //  Se cargan las configuraciones a GlobalConfig conf.
     //===================================================================
-    if (config.count("DEV_MODE")) {
-        conf.dev_mode = static_cast<uint8_t>(std::stoi(config["DEV_MODE"]) != 0);
+    if (config_file_data.count("DEV_MODE")) {
+        conf.dev_mode = static_cast<uint8_t>(std::stoi(config_file_data["DEV_MODE"]) != 0);
     }
 
-    if (config.count("DEBUG_MODE")) {
-        conf.debug_mode = static_cast<uint8_t>(std::stoi(config["DEBUG_MODE"]) != 0);
+    if (config_file_data.count("DEBUG_MODE")) {
+        conf.debug_mode = static_cast<uint8_t>(std::stoi(config_file_data["DEBUG_MODE"]) != 0);
     }
 
-    if (config.count("LOG_MODE")) {
-        conf.log_mode = static_cast<uint8_t>(std::stoi(config["LOG_MODE"]) != 0);
+    if (config_file_data.count("LOG_MODE")) {
+        conf.log_mode = static_cast<uint8_t>(std::stoi(config_file_data["LOG_MODE"]) != 0);
     }
 
-    if (config.count("PORT")) {
-        int port = std::stoi(config["PORT"]);
+    if (config_file_data.count("PORT")) {
+        int port = std::stoi(config_file_data["PORT"]);
         if (port >= 1024 && port <= 65535) {
             conf.port = port;
         } else {
@@ -394,8 +395,8 @@ static inline void load_or_create_config(GlobalConfig& conf) {
         }
     }
 
-    if (config.count("MAX_THREADS")) {
-        int threads = std::stoi(config["MAX_THREADS"]);
+    if (config_file_data.count("MAX_THREADS")) {
+        int threads = std::stoi(config_file_data["MAX_THREADS"]);
         if (threads > 1 && threads <= 8) {
             conf.max_threads = threads;
         } else {
@@ -403,8 +404,8 @@ static inline void load_or_create_config(GlobalConfig& conf) {
         }
     }
 
-    if (config.count("LOGIN_EXPIRATION")) {
-        int login_expiration = std::stoi(config["LOGIN_EXPIRATION"]);
+    if (config_file_data.count("LOGIN_EXPIRATION")) {
+        int login_expiration = std::stoi(config_file_data["LOGIN_EXPIRATION"]);
         if (login_expiration >= 1800 && login_expiration <= 172800) {
             conf.login_expiration = login_expiration;
         } else {
@@ -412,20 +413,20 @@ static inline void load_or_create_config(GlobalConfig& conf) {
         }
     }
 
-    if (config.count("SERVERS_PATH")) {
-        set_path(conf.servers_path, sizeof(conf.servers_path), config["SERVERS_PATH"].c_str(), "SERVERS_PATH");
+    if (config_file_data.count("SERVERS_PATH")) {
+        set_path(conf.servers_path, sizeof(conf.servers_path), config_file_data["SERVERS_PATH"].c_str(), "SERVERS_PATH");
     }
 
-    if (config.count("DB_PATH")) {
-        set_path(conf.db_name, sizeof(conf.db_name), config["DB_NAME"].c_str(), "DB_NAME");
+    if (config_file_data.count("DB_PATH")) {
+        set_path(conf.db_name, sizeof(conf.db_name), config_file_data["DB_NAME"].c_str(), "DB_NAME");
     }
 
-    if (config.count("LOG_PATH")) {
-        set_path(conf.log_file, sizeof(conf.log_file), config["LOG_PATH"].c_str(), "LOG_PATH");
+    if (config_file_data.count("LOG_PATH")) {
+        set_path(conf.log_file, sizeof(conf.log_file), config_file_data["LOG_PATH"].c_str(), "LOG_PATH");
     }
 
-    if (config.count("MAX_REQ_BUF_SIZE")) {
-        int max_req_buf_size = std::stoi(config["MAX_REQ_BUF_SIZE"]);
+    if (config_file_data.count("MAX_REQ_BUF_SIZE")) {
+        int max_req_buf_size = std::stoi(config_file_data["MAX_REQ_BUF_SIZE"]);
         if (max_req_buf_size >= 1800 && max_req_buf_size <= 172800) {
             conf.max_req_buf_size = max_req_buf_size;
         } else {

@@ -16,3 +16,5 @@
 .asciz "Developer: Strapicarus\n"
 
 .align 4
+
+.section .note.GNU-stack,"",@progbits

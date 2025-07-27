@@ -181,11 +181,11 @@ int main(int argc, char* argv[]) {
 
     checkNotRoot();
 
-    parse_arguments(argc, argv, config);
-
     try {
 
         load_or_create_config(config);
+
+        parse_arguments(argc, argv, config);
 
         DBManager db_manger(get_db_file());
 

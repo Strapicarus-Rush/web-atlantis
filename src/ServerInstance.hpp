@@ -59,7 +59,7 @@ public:
             return false;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
-        debug_log("is_running");
+        
         std::string output;
         try {
             output = read_output();
@@ -117,8 +117,8 @@ public:
                 cmd = file_to_run;
             }
         }else{
-            cmd = "tmux new-session -d -s \"" + session + "\" "
-                    "\"cd \\\"" + path + "\\\" && " + file_to_run + "\"";
+            cmd = "tmux new-session -d -s " + session + " \""
+                    "cd " + path + " && " + file_to_run + "\"";
         }
 
         int result = std::system(cmd.c_str());
