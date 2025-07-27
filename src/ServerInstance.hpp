@@ -132,7 +132,7 @@ public:
             return {false, "[ERROR] Falló al iniciar el servidor"};
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(60000)); // 60 segundos de espera antes de confirmar estado         
+        std::this_thread::sleep_for(std::chrono::seconds(160)); // 160 segundos de espera antes de confirmar estado         
 
         running = wait_for_initialization();
         message = running ? "El servidor está ejecutandose." : "Algo pasó pero no era lo que se esperaba";
@@ -147,9 +147,9 @@ public:
             if(is_running()) [[likely]] {
                 // if(config.dev_mode) cmd = "q"; // para pruebas en dev sin servidores ejecutandose. q para salir del reproductor de musica o btop
                 // bool sent = config.dev_mode ? send_raw_key(cmd) : send_command(cmd);
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 if(send_command(cmd)){
                     debug_log("command sent " + cmd);
+                    std::this_thread::sleep_for(std::chrono::seconds(29)); //29 segundo tarda en cerrar el servidor aprox.
                     if(wait_for_termination()){
                         // std::string cmd = "tmux kill-session -t \"" + session + "\"";
                         // int result = std::system(cmd.c_str());
