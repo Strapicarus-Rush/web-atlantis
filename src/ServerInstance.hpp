@@ -70,10 +70,10 @@ public:
             return false;
         }
         std::smatch match;
-        if (config.dev_mode && std::regex_search(output, match, regex_test_inicialization)) {
-            debug_log("test initialization complete");
-            return true;
-        }
+        // if (config.dev_mode && std::regex_search(output, match, regex_test_inicialization)) {
+        //     debug_log("test initialization complete");
+        //     return true;
+        // }
         for(auto& pattern : regex_count_patterns){
             if (std::regex_search(output, match, pattern)) {
                 debug_log("List pattern found");
@@ -132,7 +132,7 @@ public:
             return {false, "[ERROR] Falló al iniciar el servidor"};
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50000)); // 40 segundos de espera antes de confirmar estado         
+        std::this_thread::sleep_for(std::chrono::milliseconds(60000)); // 60 segundos de espera antes de confirmar estado         
 
         running = wait_for_initialization();
         message = running ? "El servidor está ejecutandose." : "Algo pasó pero no era lo que se esperaba";
@@ -145,28 +145,37 @@ public:
         std::string cmd = "stop";
         if (check_session_exists()) [[likely]] {
             if(is_running()) [[likely]] {
-                if(config.dev_mode) cmd = "q"; // para pruebas en dev sin servidores ejecutandose. q para salir del reproductor de musica o btop
-                bool sent = config.dev_mode ? send_raw_key(cmd) : send_command(cmd);
+                // if(config.dev_mode) cmd = "q"; // para pruebas en dev sin servidores ejecutandose. q para salir del reproductor de musica o btop
+                // bool sent = config.dev_mode ? send_raw_key(cmd) : send_command(cmd);
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                if(sent){
-                    debug_log("command sent");
+                if(send_command(cmd)){
+                    debug_log("command sent " + cmd);
                     if(wait_for_termination()){
-                        std::string cmd = "tmux kill-session -t \"" + session + "\"";
-                        int result = std::system(cmd.c_str());
-                        if (result != 0) {
-                            running = false;
-                            message = "Detenido antes del comando";
-                        }else{
+                        // std::string cmd = "tmux kill-session -t \"" + session + "\"";
+                        // int result = std::system(cmd.c_str());
+                        // if (result != 0) {
+                        //     running = false;
+                        //     message = "Detenido antes del comando";
+                        // }else{
                             running = false;
                             message = "Servidor detenido correctamente";
-                        }
-                    }else [[unlikely]] {
+                        // }
+                    } else [[unlikely]] {
                         success = false;
                         message = "No se pudo confirmar la detención.";
                     }
-                }else [[unlikely]] {
+                } else [[unlikely]] {
                     success = false;
                     message = "No se pudo enviar el comando stop.";
+                }
+            } else [[unlikely]] {
+                running = false;
+                std::string cmd = "tmux kill-session -t \"" + session + "\"";
+                int result = std::system(cmd.c_str());
+                if (result != 0) [[unlikely]] {
+                    message = "Se Detuvo la sesión de tmux, el servidor no estaba activo";
+                }else{
+                message = "No se pudo enviar el comando stop.";
                 }
             }
         }
@@ -436,7 +445,7 @@ private:
 
         return false; // timeout
     }
-    bool wait_for_termination(int max_wait_seconds = 30, int interval_seconds = 5) {
+    bool wait_for_termination(int max_wait_seconds = 50, int interval_seconds = 10) {
         auto start_time = std::chrono::steady_clock::now();
         while (std::chrono::duration_cast<std::chrono::seconds>(
                    std::chrono::steady_clock::now() - start_time).count() < max_wait_seconds) {
