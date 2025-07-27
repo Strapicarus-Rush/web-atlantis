@@ -272,7 +272,7 @@ public:
                 update_resource_usage();
                 debug_log(name + " Inicializado y ejecutandose");
             }else [[unlikely]] {
-                debug_log(name + " La sesión existe pero no está en ejecución");
+                debug_log(name + " El Socket de tmux existe, pero el servidor no está en ejecución");
             }
         }else [[unlikely]] {
             debug_log(name + "Sesión no existe en tmux");

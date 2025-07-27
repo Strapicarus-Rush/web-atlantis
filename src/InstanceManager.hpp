@@ -25,7 +25,7 @@ public:
 
     static ServerInstance* get_instance_by_name(const std::string& name) {
         for (auto& inst : instances) {
-            if (inst.name == name) return &inst;
+            if (to_lower(inst.session) == to_lower(name)) return &inst;
         }
         return nullptr;
     }
