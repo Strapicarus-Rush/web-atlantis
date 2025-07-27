@@ -132,7 +132,7 @@ public:
             return {false, "[ERROR] Falló al iniciar el servidor"};
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(40000)); // 40 segundos de espera antes de confirmar estado         
+        std::this_thread::sleep_for(std::chrono::milliseconds(50000)); // 40 segundos de espera antes de confirmar estado         
 
         running = wait_for_initialization();
         message = running ? "El servidor está ejecutandose." : "Algo pasó pero no era lo que se esperaba";
@@ -423,7 +423,7 @@ public:
     }
 
 private:
-    bool wait_for_initialization(int max_wait_seconds = 40, int interval_seconds = 5) {
+    bool wait_for_initialization(int max_wait_seconds = 60, int interval_seconds = 10) {
         auto start_time = std::chrono::steady_clock::now();
         while (std::chrono::duration_cast<std::chrono::seconds>(
                    std::chrono::steady_clock::now() - start_time).count() < max_wait_seconds) {

@@ -182,9 +182,9 @@ inline std::string get_instance_console(const std::string instance_name){
         return "Instancia no encontrada";
     }
 
-    if (!instance->is_running())
+    if (!instance->check_session_exists())
     {
-        return "";
+        return "Instancia de tmux inexistente";
     }
     return instance->read_output();
 }
