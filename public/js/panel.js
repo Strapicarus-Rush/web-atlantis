@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
 
   let selectedInstance = undefined;
+  let instanceData = undefined;
   const selectorSelectText = "Selecciona una instancia";
   const selectorStatusText = "Ver Status general";
   let instancesList = []
@@ -10,6 +11,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const generalStatus = document.getElementById('generalStatus');
   const instanceStatus = document.getElementById('instanceStatus');
   const instanceNameSpan = document.querySelector('[data-instance-name]');
+  let previous_console_output="";
+  const statusMap = {
+      running: { color: "green", label: "Activo" },
+      booting: { color: "yellow", label: "Iniciando" },
+      stopping: {color: "orange", label: "Deteniendo"},
+      stopped: { color: "red", label: "Detenido" }
+    };
 
   function formatMemory(kb) {
     if (kb == null || isNaN(kb)) return "-";
@@ -169,13 +177,14 @@ document.addEventListener('DOMContentLoaded', () => {
   //  Lógica para selector de instancia y status del servidor
   // =============================================================
 
-  instanceSelector.addEventListener('change', () => {
+  instanceSelector.addEventListener('change', async () => {
     selectedInstance = instanceSelector.value;
     const instanceNameSpan = document.querySelector('[data-instance-name]');
     let isSelected = false;
     if(selectedInstance != null && selectedInstance != undefined && typeof(selectedInstance) == "string" && selectedInstance != "") {
       isSelected = true;
     }
+    await fetchInstanceData(selectedInstance);
     if (!isSelected) {
       generalStatus.classList.remove('hidden');
       instanceStatus.classList.add('hidden');
@@ -183,8 +192,9 @@ document.addEventListener('DOMContentLoaded', () => {
       instanceNameSpan.textContent = "-";
       instancesList.forEach(server => {
         const option = document.createElement('option');
-        option.value = server;
-        option.textContent = server;
+        const current = statusMap[server.status] || { color: "gray", label: "Desconocido" };
+        option.value = server.name;
+        option.textContent = server.name + " (" +current.label + ")" ;
         instanceSelector.appendChild(option);
       });
       return;
@@ -195,38 +205,28 @@ document.addEventListener('DOMContentLoaded', () => {
     instanceSelector.innerHTML = '<option value="">'+ selectorStatusText +'</option>';
     instancesList.forEach(server => {
       const option = document.createElement('option');
-      option.value = server;
-      option.textContent = server;
+      option.value = server.name;
+      option.textContent = server.name + " (" + instanceData.status + ")" ;
       instanceSelector.appendChild(option);
     });
 
-    // Restaurar selección
     instanceSelector.value = selectedInstance;
     instanceNameSpan.textContent = selectedInstance;
 
-    fetchInstanceData(selectedInstance);
   });
 
   function updateInstanceStatus(data) {
     const statusText = document.querySelector('[data-key="status"]');
     const statusDot = document.querySelector('[data-key="instance_status_dot"]');
 
-    const statusMap = {
-      running: { color: "green", label: "Activo" },
-      starting: { color: "orange", label: "Iniciando" },
-      stopped: { color: "red", label: "Detenido" }
-    };
-
     const current = statusMap[data.status] || { color: "gray", label: "Desconocido" };
 
-    // Actualizar texto
     if (statusText) statusText.textContent = current.label;
 
-    // Limpiar clases y aplicar color
     if (statusDot) {
       statusDot.className = `status-dot ${current.color}`;
     }
-    const mapping = {
+    instanceData = {
       backup: data.backup ?? "-",
       complete: data.complete ?? "-",
       cpu: data.cpu ?? "-",
@@ -234,13 +234,28 @@ document.addEventListener('DOMContentLoaded', () => {
       has_run: data.has_run ?? "-",
       name: data.name ?? "-",
       player_count: data.player_count ?? "-",
+      player_list: data.player_list ?? "-",
       ram_used: formatMemory(data.ram_used) ?? "-",
-      status: data.status ?? "-",      
+      status: current.label ?? "-",      
     };
 
-    for (const key in mapping) {
+    for (const key in instanceData) {
       const txt = document.querySelector(`[data-key="${key}"]`);
-      if (txt) txt.textContent = mapping[key];
+      if (txt) txt.textContent = instanceData[key];
+    }
+
+    for (const option of instanceSelector.options) {
+      if (option.value === instanceData.name) {
+        option.textContent = `${instanceData.name} (${current.label})`;
+        break;
+      }
+    }
+    if(data.status === "booting" || data.status === "stopping"){
+      setTimeout(() => {
+        fetchInstanceData(selectedInstance);
+      },10000);
+    } else{
+      document.getElementById("inlineSpinner").classList.add("hidden");
     }
   }
 
@@ -272,8 +287,9 @@ document.addEventListener('DOMContentLoaded', () => {
     instancesList = data.servers ? data.servers : instancesList;
     instancesList.forEach(server => {
       const option = document.createElement('option');
-      option.value = server;
-      option.textContent = server;
+      const current = statusMap[server.status] || { color: "gray", label: "Desconocido" };
+      option.value = server.name;
+      option.textContent = server.name + " (" +current.label + ")" ;
       instanceSelector.appendChild(option);
     });
     
@@ -327,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function fetchInstanceData(instance) {
-
+    document.getElementById("inlineSpinner").classList.remove("hidden");
     const endpoint = instanceSelector.dataset.endpoint;
     const method = instanceSelector.dataset.method;
     const payload = { "name":instance }
@@ -354,6 +370,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function cleanStr(oldStr, newStr) {
+    const oldLines = new Set(oldStr.split('\n').map(line => line.trim()));
+    const newLines = newStr.split('\n');
+
+    const diffLines = newLines.filter(line => !oldLines.has(line.trim()));
+    return diffLines.join('\n');
+  }
+
   async function fetchConsole(section) {
     const consoleTab = document.querySelector('button[data-tab="console-view"]');
     // const output = document.querySelector('button[data-tab="console-view"]');
@@ -366,7 +390,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!res.success) {
         showAlert(res.message, "error");
       }else{
-        console_output.textContent = res.console;
+        let newLines = cleanStr(previous_console_output, res.console);
+        previous_console_output = res.console;
+        console_output.textContent += newLines !="" ? "\n" + newLines : "";
       }
     } catch (err) {
       console_output.textContent += `\n[Error] ${err.message}`;
@@ -543,7 +569,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert(res.message, "success");
           } else {
             showAlert(res.message, "error");
-            // showAlert(`Acción '${action}' no ejecutada`, "error");
           }
         }
         

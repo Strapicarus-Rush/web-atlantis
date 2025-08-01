@@ -15,9 +15,16 @@ std::vector<ServerInstance> InstanceManager::instances;
 struct GeneralStatus {
     int total_instances = 0;
     int running_instances = 0;
+    int booting_instances = 0;
+    int stopping_instances = 0;
     size_t ram_used = 0;
     int cpu = 0;
     int total_players = 0;
+};
+
+struct selector_instances {
+    std::string name;
+    std::string status;
 };
 
 // ==============================
@@ -29,11 +36,12 @@ inline json instance_status_json(ServerInstance* s) {
     j["name"] = s->name;
     j["has_run"] = s->has_run ? "Yes" : "No";
     j["has_jar"] = s->has_jar ? "Yes" : "No";
-    j["status"] = s->running ? "running" : "stopped";
+    j["status"] = s->running ? "running" : s->booting ? "booting" : s->stopping ? "stopping" : "stopped";
     j["complete"] = s->complete ? "Yes" : "No";
     j["ram_used"] = s->ram_used;
     j["cpu"] = s->cpu;
     j["player_count"] = s->active_users;
+    j["player_list"] = s->users_list;
     j["backup"] = s->backup_path();
 
     return j;
@@ -72,13 +80,33 @@ static std::vector<ServerInstance>& list_instances() {
     return InstanceManager::instances;
 }
 
-static std::vector<std::string> short_list_instances() {
+// static std::vector<selector_instances> short_list_instances() {
+//     load_instances_if_needed();
+//     std::vector<selector_instances> names;
+//     for (const auto& instance : InstanceManager::instances) {
+//         selector_instances inst;
+//         inst.name = instance.name;
+//         inst.status = instance.running ? "running" : instance.booting ? "booting" : instance.stopping ? "stopping" : "stopped";
+//         names.push_back(inst);
+//     }
+//     return names;
+// }
+
+static std::vector<json> short_list_instances() {
     load_instances_if_needed();
-    std::vector<std::string> names;
+    std::vector<json> list;
+
     for (const auto& instance : InstanceManager::instances) {
-        names.push_back(instance.name);
+        list.push_back({
+            {"name", instance.name},
+            {"status", instance.running ? "running" :
+                      instance.booting ? "booting" :
+                      instance.stopping ? "stopping" :
+                      "stopped"}
+        });
     }
-    return names;
+
+    return list;
 }
 
 inline GeneralStatus get_general_status() {
@@ -99,6 +127,13 @@ inline GeneralStatus get_general_status() {
             status.ram_used += instance.ram_used;
             status.cpu += instance.cpu;
         } 
+        if(instance.is_booting()){
+            instance.update_status();
+            status.booting_instances++;
+            status.total_players += instance.active_users;
+            status.ram_used += instance.ram_used;
+            status.cpu += instance.cpu;
+        }
     }
 
     return status;

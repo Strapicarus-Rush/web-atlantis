@@ -51,13 +51,16 @@
 
       <div id="instanceStatus" class="info-block hidden">
           <p><strong>Instancia:</strong> <span data-key="name">-</span></p>
-          <p><strong>Estado:</strong> <span class="status-dot" data-key="instance_status_dot"></span> <span data-key="status">-</span></p>
+          <p><strong>Estado:</strong> <span class="status-dot" data-key="instance_status_dot"></span> <span data-key="status">-</span>
+            <span id="inlineSpinner" class="inline-spinner hidden"></span>
+          </p>
           <p><strong>Complete:</strong> <span data-key="complete">-</span></p>
           <p><strong>JAR:</strong> <span data-key="has_jar">-</span></p>
           <p><strong>SH:</strong> <span data-key="has_run">-</span></p>
           <p><strong>CPU %: </strong> <span data-key="cpu">-</span></p>
           <p><strong>RAM Usada:</strong> <span data-key="ram_used">-</span></p>
-          <p><strong>Jugadores:</strong> <span data-key="player_count">-</span></p>
+          <p><strong>Nº Jugadores:</strong> <span data-key="player_count">-</span></p>
+          <p><strong>Jugadores:</strong> <span data-key="player_list">-</span></p>
           <p><strong>Backups:</strong> <span data-key="backup">-</span></p>
         <div class="menu-buttons">
           <button data-instance-action="refresh" data-function="fetchInstanceData" data-method="REPORT" data-endpoint="/api/instance/status">Actualizar estado</button>

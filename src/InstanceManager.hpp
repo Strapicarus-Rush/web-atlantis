@@ -17,7 +17,7 @@ public:
                 id++;
                 ServerInstance instance(entry.path().filename().string(), entry.path().string(), id);
                 if (instance.is_valid()) {
-                    instances.push_back(instance);
+                    instances.push_back(std::move(instance));
                 }
             }
         }
